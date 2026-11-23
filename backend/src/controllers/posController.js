@@ -1,6 +1,12 @@
 const { listarCategorias } = require('../services/categoriaService');
 const { listarProductos } = require('../services/productoService');
-const { obtenerProximoNumero, crearPedido } = require('../services/pedidoService');
+const {
+  obtenerProximoNumero,
+  crearPedido,
+  listarPedidos,
+  obtenerPedido,
+  anularPedido,
+} = require('../services/pedidoService');
 
 async function getCategorias(req, res, next) {
   try {
@@ -45,4 +51,55 @@ async function postPedido(req, res, next) {
   }
 }
 
-module.exports = { getCategorias, getProductos, getProximoNumero, postPedido };
+async function getPedidos(req, res, next) {
+  try {
+    const consulta = res.locals.validated.query;
+    // Los textos vacíos cuentan como "sin filtro"; página y límite se limitan a valores razonables.
+    const pagina = Math.max(Number(consulta.pagina) || 1, 1);
+    const limite = Math.min(Math.max(Number(consulta.limite) || 20, 1), 100);
+
+    const resultado = await listarPedidos({
+      desde: consulta.desde || undefined,
+      hasta: consulta.hasta || undefined,
+      tipoComprobante: consulta.tipoComprobante || undefined,
+      metodoPago: consulta.metodoPago || undefined,
+      estado: consulta.estado || undefined,
+      pagina,
+      limite,
+    });
+
+    res.status(200).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getPedido(req, res, next) {
+  try {
+    res.status(200).json(await obtenerPedido(Number(res.locals.validated.params.id)));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function patchAnularPedido(req, res, next) {
+  try {
+    const usuarioId = Number(req.user?.sub ?? req.user?.id) || null;
+    const motivo = res.locals.validated.body?.motivo || undefined;
+    const pedido = await anularPedido(Number(res.locals.validated.params.id), { usuarioId, motivo });
+
+    res.status(200).json(pedido);
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  getCategorias,
+  getProductos,
+  getProximoNumero,
+  postPedido,
+  getPedidos,
+  getPedido,
+  patchAnularPedido,
+};

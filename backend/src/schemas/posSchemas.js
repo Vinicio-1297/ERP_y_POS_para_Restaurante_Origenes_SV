@@ -29,4 +29,22 @@ const pedidoSchema = z
     path: ['proveedorDigital'],
   });
 
-module.exports = { productosQuerySchema, pedidoSchema };
+// Filtros del listado. Todo llega como texto; los vacíos ("?estado=") se aceptan y se ignoran.
+const pedidosQuerySchema = z.object({
+  desde: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'desde debe tener formato AAAA-MM-DD').optional(),
+  hasta: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'hasta debe tener formato AAAA-MM-DD').optional(),
+  tipoComprobante: z.enum(['', 'consumidor-final', 'credito-fiscal']).optional(),
+  metodoPago: z.enum(['', 'efectivo', 'tarjeta', 'digital']).optional(),
+  estado: z.enum(['', 'completado', 'anulado']).optional(),
+  pagina: z.string().regex(/^\d{0,6}$/, 'pagina debe ser un número').optional(),
+  limite: z.string().regex(/^\d{0,3}$/, 'limite debe ser un número').optional(),
+});
+
+const idParamSchema = z.object({
+  id: z.string().regex(/^\d{1,9}$/, 'id debe ser un número'),
+});
+
+// El cuerpo es opcional: se puede anular sin escribir motivo.
+const anularSchema = z.object({ motivo: z.string().trim().max(200).optional() }).optional();
+
+module.exports = { productosQuerySchema, pedidoSchema, pedidosQuerySchema, idParamSchema, anularSchema };

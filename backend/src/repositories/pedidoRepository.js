@@ -49,4 +49,119 @@ async function insertarDetalle(datos, transaccion) {
     `);
 }
 
-module.exports = { insertar, insertarDetalle };
+const COLUMNAS_PEDIDO = `
+  id,
+  numero,
+  sucursal,
+  tipo_servicio      AS tipoServicio,
+  tipo_comprobante   AS tipoComprobante,
+  numero_comprobante AS numeroComprobante,
+  metodo_pago        AS metodoPago,
+  proveedor_digital  AS proveedorDigital,
+  subtotal_cents     AS subtotalCents,
+  iva_cents          AS ivaCents,
+  total_cents        AS totalCents,
+  estado,
+  fecha`;
+
+// Lista paginada con filtros opcionales. Devuelve { filas, total } (total = cuántos hay con esos filtros).
+// Las condiciones son texto fijo; todos los valores que vienen del usuario van como parámetros (@...).
+async function listar(filtros, transaccion) {
+  const request = await crearRequest(transaccion);
+  const condiciones = ['1 = 1'];
+
+  if (filtros.sucursal) {
+    request.input('sucursal', sql.NVarChar(100), filtros.sucursal);
+    condiciones.push('sucursal = @sucursal');
+  }
+  if (filtros.desde) {
+    request.input('desde', sql.DateTime2, filtros.desde);
+    condiciones.push('fecha >= @desde');
+  }
+  if (filtros.hasta) {
+    request.input('hasta', sql.DateTime2, filtros.hasta);
+    condiciones.push('fecha < @hasta');
+  }
+  if (filtros.tipoComprobante) {
+    request.input('tipoComprobante', sql.VarChar(20), filtros.tipoComprobante);
+    condiciones.push('tipo_comprobante = @tipoComprobante');
+  }
+  if (filtros.metodoPago) {
+    request.input('metodoPago', sql.VarChar(10), filtros.metodoPago);
+    condiciones.push('metodo_pago = @metodoPago');
+  }
+  if (filtros.estado) {
+    request.input('estado', sql.VarChar(10), filtros.estado);
+    condiciones.push('estado = @estado');
+  }
+
+  request.input('offset', sql.Int, filtros.offset);
+  request.input('limite', sql.Int, filtros.limite);
+
+  const donde = condiciones.join(' AND ');
+
+  const resultado = await request.query(`
+    SELECT ${COLUMNAS_PEDIDO}
+    FROM dbo.pedidos
+    WHERE ${donde}
+    ORDER BY fecha DESC, id DESC
+    OFFSET @offset ROWS FETCH NEXT @limite ROWS ONLY;
+
+    SELECT COUNT(*) AS total FROM dbo.pedidos WHERE ${donde};
+  `);
+
+  return { filas: resultado.recordsets[0], total: resultado.recordsets[1][0].total };
+}
+
+// Un pedido (encabezado) o null si no existe.
+async function obtenerPorId(id, transaccion) {
+  const request = await crearRequest(transaccion);
+  const resultado = await request.input('id', sql.Int, id).query(`
+    SELECT ${COLUMNAS_PEDIDO},
+           anulado_en       AS anuladoEn,
+           motivo_anulacion AS motivoAnulacion
+    FROM dbo.pedidos
+    WHERE id = @id
+  `);
+
+  return resultado.recordset[0] ?? null;
+}
+
+async function obtenerDetalle(pedidoId, transaccion) {
+  const request = await crearRequest(transaccion);
+  const resultado = await request.input('pedidoId', sql.Int, pedidoId).query(`
+    SELECT producto_id        AS productoId,
+           nombre_producto    AS nombre,
+           cantidad,
+           precio_unit_cents  AS precioUnitCents,
+           subtotal_cents     AS subtotalCents
+    FROM dbo.pedido_detalle
+    WHERE pedido_id = @pedidoId
+    ORDER BY id
+  `);
+
+  return resultado.recordset;
+}
+
+// Marca el pedido como anulado SOLO si sigue "completado". Devuelve { id } si lo anuló o null si no
+// pudo (no existe o ya estaba anulado). Hacerlo en un solo UPDATE evita que dos personas lo anulen a la vez.
+async function anular({ id, usuarioId, motivo }, transaccion) {
+  const request = await crearRequest(transaccion);
+  const resultado = await request
+    .input('id', sql.Int, id)
+    .input('usuarioId', sql.Int, usuarioId ?? null)
+    .input('motivo', sql.NVarChar(200), motivo ?? null)
+    .query(`
+      UPDATE dbo.pedidos
+      SET estado = 'anulado',
+          anulado_en = SYSUTCDATETIME(),
+          anulado_por = @usuarioId,
+          motivo_anulacion = @motivo
+      OUTPUT inserted.id
+      WHERE id = @id AND estado = 'completado'
+    `);
+
+  return resultado.recordset[0] ?? null;
+}
+
+module.exports = { insertar, insertarDetalle, listar, obtenerPorId, obtenerDetalle, anular };
