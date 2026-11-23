@@ -16,7 +16,7 @@ export default function useOrder() {
       if (existing) {
         return current.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
       }
-      return [...current, { id: product.id, name: product.name, priceCents: product.priceCents, emoji: product.emoji, quantity: 1 }];
+      return [...current, { id: product.id, name: product.name, priceCents: product.priceCents, emoji: product.emoji, image: product.image, quantity: 1 }];
     });
   }
 

@@ -1,4 +1,5 @@
 import { formatCents } from '../../utils/money.js';
+import ProductPhoto from './ProductPhoto.jsx';
 
 const SERVICE_TYPES = [
   { id: 'llevar', label: 'Llevar', icon: '🛍️' },
@@ -62,7 +63,9 @@ export default function OrderPanel({ orderNumber, order, onProcessSale }) {
         {items.length === 0 && <li className="order-empty">Agrega productos del menú</li>}
         {items.map((item) => (
           <li key={item.id} className="order-item">
-            <div className="order-item-photo" aria-hidden="true">{item.emoji}</div>
+            <div className="order-item-photo" aria-hidden="true">  
+              <ProductPhoto image={item.image} emoji={item.emoji} />
+              </div>
             <div className="order-item-name">
               <strong>{item.name}</strong>
               <small>{formatCents(item.priceCents)}$/u</small>
