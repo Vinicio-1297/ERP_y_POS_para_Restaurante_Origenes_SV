@@ -1,10 +1,11 @@
 import { formatCents } from '../../utils/money.js';
+import ProductPhoto from './ProductPhoto.jsx';
 
 export default function ProductCard({ product, onAdd }) {
   return (
     <article className="product-card">
       <div className="product-photo" aria-hidden="true">
-        {product.image ? <img src={product.image} alt="" /> : <span>{product.emoji}</span>}
+        <ProductPhoto image={product.image} emoji={product.emoji} />
       </div>
       <div className="product-info">
         <h3>{product.name}</h3>
