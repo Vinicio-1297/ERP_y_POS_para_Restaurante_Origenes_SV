@@ -10,6 +10,7 @@ const authRoutes = require('./routes/authRoutes');
 const clienteRoutes = require('./routes/clienteRoutes');
 const sucursalRoutes = require('./routes/sucursalRoutes');
 const empleadoRoutes = require('./routes/empleadoRoutes'); 
+const cajaRoutes = require('./routes/cajaRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api', clienteRoutes);
 app.use('/api', sucursalRoutes);
 app.use('/api', posRoutes);
 app.use('/api', empleadoRoutes); 
+app.use('/api', cajaRoutes);
 app.use(errorHandler);
 
 module.exports = app;
