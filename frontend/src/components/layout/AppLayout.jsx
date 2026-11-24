@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import formatToday from '../../utils/formatToday.js';
 import '../../styles/pos.css';
 
 const NAV_ITEMS = [
@@ -10,12 +11,6 @@ const NAV_ITEMS = [
   { to: '/caja', label: 'Caja', icon: '💵' },
   { to: '/rrhh', label: 'RRHH', icon: '👥' },
 ];
-
-function formatToday() {
-  const parts = new Intl.DateTimeFormat('es-SV', { day: 'numeric', month: 'short', year: 'numeric' }).formatToParts(new Date());
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  return `${get('day')} de ${get('month').replace('.', '')} ${get('year')}`;
-}
 
 export default function AppLayout() {
   const [search, setSearch] = useState('');

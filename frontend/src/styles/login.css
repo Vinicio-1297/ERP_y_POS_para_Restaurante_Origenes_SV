@@ -1,0 +1,245 @@
+/* Login de Orígenes SV, tomado del wireframe. Mismos colores base que pos.css. */
+.login-page {
+  --c-bg: #f8d9a0;
+  --c-brand: #a9503a;
+  --c-brand-dark: #8e3f2c;
+  --c-input: #f8f5ee;
+  --c-input-border: #a9503a66;
+ 
+  display: grid;
+  grid-template-columns: minmax(300px, 430px) 1fr;
+  gap: 1.5rem;
+  min-height: 100vh;
+  padding: 1.25rem;
+  box-sizing: border-box;
+  background: var(--c-bg);
+  color: var(--c-brand);
+  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+}
+ 
+/* ---------- Panel de bienvenida ---------- */
+.login-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  padding: 2rem 2.5rem;
+  border-radius: 24px;
+  background: var(--c-brand);
+  color: #fff6e6;
+  text-align: center;
+}
+ 
+.login-brand h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+ 
+.login-brand small {
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+ 
+.login-hello {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+ 
+.login-photo {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 246, 230, 0.35);
+}
+ 
+.login-tagline p {
+  margin: 0.4rem 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+ 
+/* ---------- Columna del formulario ---------- */
+.login-main {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+ 
+.login-date {
+  position: absolute;
+  top: 1rem;
+  right: 3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+ 
+.login-card {
+  width: min(100%, 340px);
+}
+ 
+.login-card h2 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+}
+ 
+.login-subtitle {
+  margin: 0.25rem 0 1.75rem;
+  font-size: 0.78rem;
+  text-align: center;
+}
+ 
+.login-field {
+  margin-bottom: 1rem;
+}
+ 
+.login-field label {
+  display: block;
+  margin: 0 0 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+ 
+.login-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+ 
+.login-control input,
+.login-control select {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 2.5rem 0 2.6rem;
+  border: 1px solid var(--c-input-border);
+  border-radius: 14px;
+  background: var(--c-input);
+  color: #4a2a20;
+  font: inherit;
+  font-size: 0.82rem;
+  appearance: none;
+}
+ 
+.login-control select {
+  cursor: pointer;
+}
+ 
+.login-control input::placeholder {
+  color: #6b4a3d;
+  opacity: 0.85;
+}
+ 
+.login-control input:focus,
+.login-control select:focus {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 1px;
+}
+ 
+.login-icon {
+  position: absolute;
+  left: 0.85rem;
+  display: grid;
+  place-items: center;
+  color: var(--c-brand-dark);
+  pointer-events: none;
+}
+ 
+.login-icon--end {
+  left: auto;
+  right: 0.85rem;
+}
+ 
+.login-toggle {
+  position: absolute;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--c-brand-dark);
+  cursor: pointer;
+}
+ 
+.login-toggle:hover {
+  background: rgba(169, 80, 58, 0.12);
+}
+ 
+.login-toggle:focus-visible {
+  outline: 2px solid var(--c-brand);
+}
+ 
+.login-forgot {
+  display: inline-block;
+  margin: 0.4rem 0 1.25rem 0.1rem;
+  color: var(--c-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+ 
+.login-forgot:hover,
+.login-forgot:focus-visible {
+  text-decoration: underline;
+}
+ 
+.login-error {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  background: #fff1ea;
+  color: #8c2f1b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+ 
+.login-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 80%;
+  height: 40px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 14px;
+  background: var(--c-brand);
+  color: #fff6e6;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+ 
+.login-submit:hover:not(:disabled) {
+  background: var(--c-brand-dark);
+}
+ 
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+ 
+/* ---------- Pantallas angostas: se oculta el panel lateral ---------- */
+@media (max-width: 860px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+ 
+  .login-welcome {
+    display: none;
+  }
+ 
+  .login-date {
+    right: 1rem;
+  }
+}
+ 

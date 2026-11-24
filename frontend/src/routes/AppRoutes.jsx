@@ -1,12 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout.jsx';
 import HealthPage from '../pages/HealthPage.jsx';
-import PlaceholderPage from '../pages/Placeholder.jsx';
+import LoginPage from '../pages/LoginPage.jsx';
+import PlaceholderPage from '../pages/PlaceHolder.jsx';
 import PosPage from '../pages/posPage.jsx';
 
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/health" element={<HealthPage />} />
       <Route element={<AppLayout />}>
         <Route path="/pos" element={<PosPage />} />
