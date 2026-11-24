@@ -10,6 +10,7 @@ import InventarioPage from '../pages/InventarioPage.jsx';
 import RecetasPage from '../pages/RecetasPage.jsx';
 import ComprasPage from '../pages/ComprasPage.jsx';
 import ProveedoresPage from '../pages/ProveedoresPage.jsx';
+import CuentasPorPagarPage from '../pages/CuentasPorPagarPage.jsx';
 
 export default function AppRoutes() {
   return (
@@ -24,6 +25,10 @@ export default function AppRoutes() {
         <Route path="/recetas" element={<RecetasPage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/proveedores" element={<ProveedoresPage />} />
+        <Route
+          path="/cuentas-por-pagar"
+          element={<CuentasPorPagarPage />}
+        />
 
         <Route path="/pedidos" element={<PlaceholderPage title="Pedidos" />} />
         <Route path="/caja" element={<PlaceholderPage title="Caja" />} />
