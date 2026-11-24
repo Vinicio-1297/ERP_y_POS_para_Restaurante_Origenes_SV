@@ -88,6 +88,9 @@ export default function InventarioPage() {
       setError('El stock y el mínimo deben ser números válidos no negativos.');
       return;
     }
+    if (!['insumo', 'reventa'].includes(form.tipo) || !['g', 'kg', 'ml', 'l', 'unidad'].includes(form.unidad)) {
+      setError('Seleccioná un tipo y una unidad válidos.'); return;
+    }
     if (products.some((p) => p.nombre.trim().toLowerCase() === nombre.toLowerCase() && p.id !== editingId)) {
       setError('Ya existe un artículo con ese nombre.');
       return;
@@ -131,7 +134,6 @@ export default function InventarioPage() {
           <h1>Inventario</h1>
           <p>Control de insumos, productos de reventa y alertas de stock mínimo</p>
         </div>
-        <button type="button" className="inv-primary" onClick={() => openForm()}>+ Nuevo artículo</button>
       </header>
 
       <FrontBNav />
@@ -142,7 +144,7 @@ export default function InventarioPage() {
       </div>
 
       <div className="inv-panel">
-        <h2>Artículos del inventario</h2>
+        <div className="frontb-panel-actions"><h2>Artículos del inventario</h2><button type="button" className="inv-primary" onClick={() => openForm()}>+ Nuevo artículo</button></div>
         <div className="inv-filters">
           <input aria-label="Buscar artículos" placeholder="Buscar nombre, categoría o código..." value={search} onChange={(event) => setSearch(event.target.value)} />
           <label>Tipo
@@ -169,7 +171,7 @@ export default function InventarioPage() {
                   <td>{p.categoria}</td><td>{p.unidad}</td><td>{p.stock}</td><td>{p.minimo}</td>
                   <td>{p.tipo === 'reventa' ? money(p.precioVenta) : '—'}</td>
                   <td><span className={`inv-status inv-${getStatus(p).toLowerCase().replace(' ', '-')}`}>{getStatus(p)}</span></td>
-                  <td className="inv-actions"><button type="button" onClick={() => openForm(p)}>Editar</button><button type="button" onClick={() => deleteProduct(p)}>Eliminar</button></td>
+                  <td><div className="inv-actions"><button type="button" onClick={() => openForm(p)}>Editar</button><button type="button" onClick={() => deleteProduct(p)}>Eliminar</button></div></td>
                 </tr>
               )) : <tr><td className="inv-empty" colSpan="9">No hay artículos para mostrar. Podés crear uno con «Nuevo artículo».</td></tr>}
             </tbody>

@@ -84,7 +84,10 @@ export default function RecetasPage() {
     if (form.ingredientes.some(i => !insumosPorId.has(String(i.insumoId)))) {
       setError('Hay ingredientes que ya no existen en Inventario. Revisá la receta.'); return;
     }
-    // Se puede guardar una receta pendiente sin ingredientes y completarla tras integrar Inventario.
+    if (!form.ingredientes.length) { setError('Agregá al menos un ingrediente antes de guardar la receta.'); return; }
+    if (form.ingredientes.some(i => !Number.isFinite(Number(i.cantidad)) || Number(i.cantidad) <= 0)) {
+      setError('Todos los ingredientes deben tener cantidades válidas y positivas.'); return;
+    }
     const saved = { id: editingId || generateId(), productoId: id, rendimiento, ingredientes: form.ingredientes };
     setRecetas(old => editingId ? old.map(r => r.id === editingId ? saved : r) : [...old, saved]);
     setVisible(false);
@@ -100,7 +103,6 @@ export default function RecetasPage() {
     <section className="rec-page">
       <header className="rec-header">
         <div><h1>Recetas</h1><p>Ingredientes y cantidades para los productos elaborados del menú</p></div>
-        <button type="button" className="rec-primary" onClick={() => abrir()}>+ Nueva receta</button>
       </header>
       <FrontBNav />
       <div className="rec-stats">
@@ -109,7 +111,7 @@ export default function RecetasPage() {
         <article><span>Pendientes</span><strong>{recetas.length - completas}</strong></article>
       </div>
       <div className="rec-panel">
-        <div className="rec-panel-head"><h2>Listado de recetas</h2><input type="search" aria-label="Buscar recetas" placeholder="Buscar producto..." value={buscar} onChange={e => setBuscar(e.target.value)} /></div>
+        <div className="rec-panel-head"><h2>Listado de recetas</h2><button type="button" className="rec-primary" onClick={() => abrir()}>+ Nueva receta</button><input type="search" aria-label="Buscar recetas" placeholder="Buscar producto..." value={buscar} onChange={e => setBuscar(e.target.value)} /></div>
         <div className="rec-table-wrap"><table><thead><tr><th>PRODUCTO DEL POS</th><th>CATEGORÍA</th><th>RENDIMIENTO</th><th>INGREDIENTES</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
           <tbody>{filtradas.map(r => {
             const p = porId.get(String(r.productoId));
@@ -128,7 +130,7 @@ export default function RecetasPage() {
             <label>Rendimiento (porciones)<input required type="number" min="1" step="1" value={form.rendimiento} onChange={e => setForm(old => ({ ...old, rendimiento: e.target.value }))}/></label>
             <div className="rec-ingredients">
               <h3>Ingredientes por receta</h3>
-              {!disponibles.length && <p className="rec-hint">No hay insumos disponibles todavía. Podés guardar la receta como pendiente y agregar ingredientes después de integrar Inventario.</p>}
+              {!disponibles.length && <p className="rec-hint">No hay insumos disponibles. Primero registrá insumos en Inventario para crear una receta.</p>}
               <div className="rec-add-row">
                 <label>Insumo<select value={insumoId} onChange={e => setInsumoId(e.target.value)} disabled={!disponibles.length}>
                   <option value="">Seleccioná un insumo...</option>{disponibles.map(i => <option key={i.id} value={i.id}>{i.nombre} ({i.unidad})</option>)}

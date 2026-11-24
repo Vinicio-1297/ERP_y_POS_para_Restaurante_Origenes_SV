@@ -17,11 +17,12 @@ function validar(form, proveedores, editando) {
   if (!form.nombre.trim()) return 'Ingresá el nombre del proveedor.';
   if (!form.contacto.trim()) return 'Ingresá una persona de contacto.';
   if (!form.telefono.trim()) return 'Ingresá un teléfono.';
+  if (!/^[+()\d\s.-]{7,30}$/.test(form.telefono.trim())) return 'Ingresá un teléfono válido (mínimo 7 caracteres).';
   if (form.correo.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo.trim())) return 'Ingresá un correo válido.';
   const dias = Number(form.diasCredito);
   if (!Number.isInteger(dias) || dias < 0 || dias > 365) return 'Los días de crédito deben estar entre 0 y 365.';
-  if (proveedores.some(p => p.id !== editando && p.nombre.toLowerCase() === form.nombre.trim().toLowerCase())) return 'Ya existe un proveedor con ese nombre.';
-  if (form.nit.trim() && proveedores.some(p => p.id !== editando && p.nit && p.nit === form.nit.trim())) return 'Ya existe un proveedor con ese NIT.';
+  if (proveedores.some(p => p.id !== editando && p.nombre.trim().toLowerCase() === form.nombre.trim().toLowerCase())) return 'Ya existe un proveedor con ese nombre.';
+  if (form.nit.trim() && proveedores.some(p => p.id !== editando && p.nit && p.nit.trim().toLowerCase() === form.nit.trim().toLowerCase())) return 'Ya existe un proveedor con ese NIT.';
   return '';
 }
 
@@ -73,7 +74,6 @@ export default function ProveedoresPage() {
     <section className="prv-page">
       <div className="prv-header">
         <div><h1>Proveedores</h1><p>Contactos, condiciones de crédito y estado de los proveedores.</p></div>
-        <button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button>
       </div>
       <FrontBNav />
       <div className="prv-stats">
@@ -83,7 +83,7 @@ export default function ProveedoresPage() {
         <article><span>Con crédito</span><strong>{conCredito}</strong></article>
       </div>
       <div className="prv-panel">
-        <div className="prv-panel-head"><h2>Directorio de proveedores</h2></div>
+        <div className="prv-panel-head"><h2>Directorio de proveedores</h2><button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button></div>
         <div className="prv-filters">
           <input type="search" aria-label="Buscar proveedores" placeholder="Buscar nombre, contacto, NIT o teléfono..." value={buscar} onChange={e => setBuscar(e.target.value)} />
           <select value={filtro} onChange={e => setFiltro(e.target.value)} aria-label="Filtrar por estado"><option>Todos</option><option>Activo</option><option>Inactivo</option></select>

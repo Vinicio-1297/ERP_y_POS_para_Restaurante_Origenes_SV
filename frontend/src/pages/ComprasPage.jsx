@@ -4,9 +4,11 @@ import '../styles/compras-feature.css';
 
 const STORAGE_KEY = 'origenes_compras_feature_v1';
 const INVENTARIO_KEY = 'origenes_inventario_feature_v1';
+const PROVEEDORES_KEY = 'origenes_proveedores_feature_v1';
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `cmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const money = (n) => new Intl.NumberFormat('es-SV', { style: 'currency', currency: 'USD' }).format(n || 0);
-const today = () => new Date().toLocaleDateString('en-CA');
+const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
+const hasCents = n => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7;
 
 function readArray(key) {
   try {
@@ -21,6 +23,7 @@ function initialForm() {
 export default function ComprasPage() {
   const [compras, setCompras] = useState(() => readArray(STORAGE_KEY));
   const [inventario, setInventario] = useState(() => readArray(INVENTARIO_KEY));
+  const [proveedores, setProveedores] = useState(() => readArray(PROVEEDORES_KEY));
   const [buscar, setBuscar] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('Todos');
   const [modal, setModal] = useState(false);
@@ -31,7 +34,7 @@ export default function ComprasPage() {
 
   useEffect(() => { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compras)); }, [compras]);
   useEffect(() => {
-    const sync = () => setInventario(readArray(INVENTARIO_KEY));
+    const sync = () => { setInventario(readArray(INVENTARIO_KEY)); setProveedores(readArray(PROVEEDORES_KEY)); };
     window.addEventListener('focus', sync);
     window.addEventListener('storage', sync);
     return () => { window.removeEventListener('focus', sync); window.removeEventListener('storage', sync); };
@@ -53,6 +56,7 @@ export default function ComprasPage() {
       lineas: compra.lineas.map(l => ({ ...l })) } : initialForm());
     setLinea({ inventarioId: '', descripcion: '', cantidad: '', costo: '' });
     setInventario(readArray(INVENTARIO_KEY));
+    setProveedores(readArray(PROVEEDORES_KEY));
     setError(''); setModal(true);
   }
   function agregarLinea() {
@@ -61,8 +65,9 @@ export default function ComprasPage() {
     const cantidad = Number(linea.cantidad);
     const costo = Number(linea.costo);
     if (!descripcion || linea.cantidad === '' || !Number.isFinite(cantidad) || cantidad <= 0 ||
-      linea.costo === '' || !Number.isFinite(costo) || costo < 0) {
-      setError('Indicá un artículo, una cantidad positiva y un costo válido.'); return;
+      linea.costo === '' || !Number.isFinite(costo) || costo < 0 || !hasCents(costo) ||
+      (item?.unidad === 'unidad' && !Number.isInteger(cantidad))) {
+      setError('Indicá artículo y cantidad positiva (entera para unidades); el costo debe ser válido y tener máximo 2 decimales.'); return;
     }
     setForm(f => ({ ...f, lineas: [...f.lineas, { id: newId(), inventarioId: item ? String(item.id) : null,
       descripcion, unidad: item?.unidad || 'unidad', cantidad, costo }] }));
@@ -76,6 +81,17 @@ export default function ComprasPage() {
     if (!numero || !proveedor || !form.fecha || form.lineas.length === 0) {
       setError('Completá factura, proveedor, fecha y al menos un artículo.'); return;
     }
+    if (!proveedores.some(p => p.nombre === proveedor && p.estado === 'Activo') &&
+      !(editingId && compras.some(c => c.id === editingId && c.proveedor === proveedor))) {
+      setError('Seleccioná un proveedor activo del directorio.'); return;
+    }
+    if (form.lineas.some(l => !l.descripcion?.trim() || !Number.isFinite(Number(l.cantidad)) || Number(l.cantidad) <= 0 ||
+      !Number.isFinite(Number(l.costo)) || Number(l.costo) < 0 || !hasCents(Number(l.costo)))) {
+      setError('Revisá las cantidades y costos de los artículos de la compra.'); return;
+    }
+    if (!Number.isFinite(totalForm) || totalForm < 0) {
+      setError('El total de la compra no es válido.'); return;
+    }
     if (form.condicionPago === 'Crédito' && (!form.vencimiento || form.vencimiento < form.fecha)) {
       setError('La fecha de vencimiento debe ser igual o posterior a la compra.'); return;
     }
@@ -85,9 +101,9 @@ export default function ComprasPage() {
     }
     const compra = { id: editingId || newId(), numero, proveedor, fecha: form.fecha,
       condicionPago: form.condicionPago, vencimiento: form.condicionPago === 'Crédito' ? form.vencimiento : '',
-      lineas: form.lineas, total: totalForm, estado: 'Borrador' };
+      lineas: form.lineas, total: Math.round((totalForm + Number.EPSILON) * 100) / 100, estado: 'Borrador' };
     setCompras(old => editingId ? old.map(c => c.id === editingId ? compra : c) : [...old, compra]);
-    setModal(false);
+    setModal(false); setError('');
   }
   function marcarRecibida(compra) {
     if (!window.confirm(`¿Marcar como recibida la factura ${compra.numero}?`)) return;
@@ -104,7 +120,6 @@ export default function ComprasPage() {
     <section className="cmp-page">
       <header className="cmp-header">
         <div><h1>Compras</h1><p>Registro de facturas, proveedores y artículos adquiridos</p></div>
-        <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>
       </header>
       <FrontBNav />
       <div className="cmp-stats">
@@ -114,7 +129,7 @@ export default function ComprasPage() {
         <article><span>Total registrado</span><strong>{money(totalRegistrado)}</strong></article>
       </div>
       <section className="cmp-panel">
-        <div className="cmp-panel-head"><h2>Facturas de compra</h2>
+        <div className="cmp-panel-head"><div className="frontb-panel-actions"><h2>Facturas de compra</h2><button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button></div>
           <div className="cmp-filters">
             <input aria-label="Buscar compras" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar factura o proveedor..." />
             <select aria-label="Filtrar por estado" value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
@@ -143,7 +158,13 @@ export default function ComprasPage() {
           <form onSubmit={guardar} className="cmp-form">
             <div className="cmp-grid">
               <label>Número de factura<input value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} required /></label>
-              <label>Proveedor<input value={form.proveedor} onChange={e => setForm(f => ({ ...f, proveedor: e.target.value }))} required placeholder="Nombre del proveedor" /></label>
+              <label>Proveedor
+                <select value={form.proveedor} onChange={e => setForm(f => ({ ...f, proveedor: e.target.value }))} required>
+                  <option value="">Seleccioná un proveedor...</option>
+                  {form.proveedor && !proveedores.some(p => p.nombre === form.proveedor && p.estado === 'Activo') && <option value={form.proveedor}>{form.proveedor} (registro anterior)</option>}
+                  {proveedores.filter(p => p.estado === 'Activo').map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                </select>
+              </label>
               <label>Fecha de compra<input type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></label>
               <label>Condición de pago<select value={form.condicionPago} onChange={e => setForm(f => ({ ...f, condicionPago: e.target.value, vencimiento: e.target.value === 'Contado' ? '' : f.vencimiento }))}><option>Contado</option><option>Crédito</option></select></label>
               {form.condicionPago === 'Crédito' && <label>Fecha de vencimiento<input type="date" min={form.fecha} value={form.vencimiento} onChange={e => setForm(f => ({ ...f, vencimiento: e.target.value }))} required /></label>}
@@ -166,6 +187,7 @@ export default function ComprasPage() {
               </li>)}</ul>}
               <strong className="cmp-total">Total: {money(totalForm)}</strong>
             </fieldset>
+            {!proveedores.some(p => p.estado === 'Activo') && <p className="cmp-helper">No hay proveedores activos. <a href="/proveedores">Registrá uno en Proveedores</a> y volvé a Compras.</p>}
             {error && <p role="alert" className="cmp-error">{error}</p>}
             <div className="cmp-form-actions"><button type="button" className="cmp-secondary" onClick={() => setModal(false)}>Cancelar</button><button type="submit" className="cmp-primary">Guardar borrador</button></div>
           </form>

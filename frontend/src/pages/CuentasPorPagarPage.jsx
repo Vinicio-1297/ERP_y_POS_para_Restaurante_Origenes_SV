@@ -14,7 +14,8 @@ function load() {
 }
 const money = (value) => new Intl.NumberFormat('es-SV', { style: 'currency', currency: 'USD' }).format(value);
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
-const today = () => new Date().toLocaleDateString('en-CA');
+const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
+const hasCents = n => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7;
 function status(invoice) {
   const balance = round(invoice.total - invoice.pagos.reduce((sum, payment) => sum + payment.monto, 0));
   if (balance <= 0) return 'Pagada';
@@ -50,9 +51,10 @@ export default function CuentasPorPagarPage() {
     if (!form.factura.trim() || !form.proveedor.trim() || !form.fecha || !form.vencimiento) {
       setError('Completá los datos obligatorios de la factura.'); return;
     }
-    if (!Number.isFinite(total) || total <= 0) { setError('El total debe ser mayor que cero.'); return; }
+    if (form.total.trim() === '' || !Number.isFinite(total) || round(total) <= 0 || !hasCents(total)) { setError('El total debe ser de al menos $0.01.'); return; }
     if (form.vencimiento < form.fecha) { setError('El vencimiento no puede ser anterior a la compra.'); return; }
-    if (facturas.some((f) => f.factura.toLowerCase() === form.factura.trim().toLowerCase())) {
+    if (facturas.some((f) => f.factura.trim().toLowerCase() === form.factura.trim().toLowerCase() &&
+      f.proveedor.trim().toLowerCase() === form.proveedor.trim().toLowerCase())) {
       setError('Ya hay una cuenta con ese número de factura.'); return;
     }
     const invoice = {
@@ -69,10 +71,10 @@ export default function CuentasPorPagarPage() {
     const current = withBalance.find((f) => f.id === selected);
     if (!current) return;
     const monto = Number(payment.monto);
-    if (!Number.isFinite(monto) || monto <= 0 || round(monto) > current.saldo) {
+    if (payment.monto.trim() === '' || !Number.isFinite(monto) || monto <= 0 || !hasCents(monto) || round(monto) > current.saldo) {
       setError('El abono debe ser mayor que cero y no superar el saldo.'); return;
     }
-    if (!payment.fecha) { setError('Indicá la fecha del abono.'); return; }
+    if (!payment.fecha || payment.fecha < current.fecha) { setError('La fecha del abono no puede ser anterior a la factura.'); return; }
     setFacturas((prev) => prev.map((f) => f.id === selected ? {
       ...f, pagos: [...f.pagos, { id: uid(), monto: round(monto), fecha: payment.fecha, metodo: payment.metodo }],
     } : f));
@@ -83,7 +85,6 @@ export default function CuentasPorPagarPage() {
     <section className="cpp-page">
       <header className="cpp-head">
         <div><h1>Cuentas por pagar</h1><p>Facturas a crédito, vencimientos y abonos a proveedores.</p></div>
-        <button type="button" className="cpp-primary" onClick={() => { setError(''); setShowForm(true); }}>+ Registrar factura</button>
       </header>
       <FrontBNav />
       <div className="cpp-stats">
@@ -92,7 +93,7 @@ export default function CuentasPorPagarPage() {
         <article><span>Facturas vencidas</span><strong>{vencidas}</strong></article>
       </div>
       <section className="cpp-panel">
-        <h2>Facturas a crédito</h2>
+        <div className="frontb-panel-actions"><h2>Facturas a crédito</h2><button type="button" className="cpp-primary" onClick={() => { setError(''); setForm(initialForm()); setSelected(null); setShowForm(true); }}>+ Registrar factura</button></div>
         <div className="cpp-filters">
           <input aria-label="Buscar facturas" placeholder="Buscar factura o proveedor..." value={query} onChange={(e) => setQuery(e.target.value)} />
           <select aria-label="Filtrar estado" value={filter} onChange={(e) => setFilter(e.target.value)}>
