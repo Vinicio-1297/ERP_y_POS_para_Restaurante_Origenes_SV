@@ -71,9 +71,12 @@
 }
 
 .app-bell {
-  border: 1px solid #000;
+  border: 0;
+  outline: 0;
+  padding: 0;
   background: transparent;
   line-height: 1;
+  cursor: pointer;
 }
 
 .app-user-name {

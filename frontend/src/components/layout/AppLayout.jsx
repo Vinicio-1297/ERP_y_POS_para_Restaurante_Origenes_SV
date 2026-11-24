@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import formatToday from '../../utils/formatToday.js';
+import { UncontrolledDropdown, DropdownToggle, DropdownMenu, DropdownItem } from 'reactstrap';
 import '../../styles/pos.css';
 
 const NAV_ITEMS = [
@@ -33,7 +34,16 @@ export default function AppLayout() {
           <button type="button" className="app-bell" aria-label="Notificaciones">🔔</button>
           <span aria-hidden="true">👤</span>
           {/* Se reemplaza por el usuario autenticado cuando exista el login. */}
-          <span className="app-user-name">Usuario: Administrador</span>
+          <UncontrolledDropdown>
+            <DropdownToggle caret tag="button" type="button" className="app-user-name">
+              Usuario: Administrador
+            </DropdownToggle>
+            <DropdownMenu end>
+              <DropdownItem onClick={() => navigate('/login')}>
+                Cerrar sesión
+              </DropdownItem>
+            </DropdownMenu>
+          </UncontrolledDropdown>
         </div>
       </header>
 
