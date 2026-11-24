@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink } from 'react-router-dom';
 import { products as posProducts } from '../data/mockMenu.js';
+import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/recetas-feature.css';
 
 // Claves de la fase de integración. Reemplazar por servicios REST cuando el backend esté listo.
@@ -102,10 +102,7 @@ export default function RecetasPage() {
         <div><h1>Recetas</h1><p>Ingredientes y cantidades para los productos elaborados del menú</p></div>
         <button type="button" className="rec-primary" onClick={() => abrir()}>+ Nueva receta</button>
       </header>
-      <nav className="rec-subnav" aria-label="Administración de inventario">
-        <NavLink to="/inventario">Inventario</NavLink>
-        <NavLink to="/recetas" className="active" aria-current="page">Recetas</NavLink>
-      </nav>
+      <FrontBNav />
       <div className="rec-stats">
         <article><span>Recetas registradas</span><strong>{recetas.length}</strong></article>
         <article><span>Con ingredientes</span><strong>{completas}</strong></article>

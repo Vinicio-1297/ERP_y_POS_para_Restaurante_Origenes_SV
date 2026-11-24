@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/proveedores-feature.css';
 
 const CLAVE = 'origenes_proveedores_feature_v1';
@@ -75,11 +75,7 @@ export default function ProveedoresPage() {
         <div><h1>Proveedores</h1><p>Contactos, condiciones de crédito y estado de los proveedores.</p></div>
         <button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button>
       </div>
-      <nav className="prv-subnav" aria-label="Sección de compras">
-        <NavLink to="/compras">Compras</NavLink>
-        <NavLink to="/proveedores" className={({ isActive }) => isActive ? 'activo' : ''}>Proveedores</NavLink>
-        <span title="Se habilitará al integrar la rama correspondiente">Cuentas por pagar</span>
-      </nav>
+      <FrontBNav />
       <div className="prv-stats">
         <article><span>Registrados</span><strong>{proveedores.length}</strong></article>
         <article><span>Activos</span><strong>{activos}</strong></article>

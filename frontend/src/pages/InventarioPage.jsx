@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/inventario-feature.css';
 
 // Datos de demostración locales hasta que exista el endpoint de inventario.
@@ -133,6 +134,7 @@ export default function InventarioPage() {
         <button type="button" className="inv-primary" onClick={() => openForm()}>+ Nuevo artículo</button>
       </header>
 
+      <FrontBNav />
       <div className="inv-stats" aria-label="Resumen de inventario">
         <article><span>Artículos registrados</span><strong>{stats.total}</strong></article>
         <article><span>Stock bajo</span><strong>{stats.low}</strong></article>

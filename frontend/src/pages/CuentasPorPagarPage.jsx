@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/cuentas-por-pagar-feature.css';
 
 const KEY = 'origenes_frontb_cuentas_por_pagar_v1';
@@ -84,6 +85,7 @@ export default function CuentasPorPagarPage() {
         <div><h1>Cuentas por pagar</h1><p>Facturas a crédito, vencimientos y abonos a proveedores.</p></div>
         <button type="button" className="cpp-primary" onClick={() => { setError(''); setShowForm(true); }}>+ Registrar factura</button>
       </header>
+      <FrontBNav />
       <div className="cpp-stats">
         <article><span>Saldo pendiente</span><strong>{money(totalPendiente)}</strong></article>
         <article><span>Facturas por pagar</span><strong>{pendientes}</strong></article>

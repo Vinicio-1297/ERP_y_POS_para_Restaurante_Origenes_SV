@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/compras-feature.css';
 
 const STORAGE_KEY = 'origenes_compras_feature_v1';
@@ -106,11 +106,7 @@ export default function ComprasPage() {
         <div><h1>Compras</h1><p>Registro de facturas, proveedores y artículos adquiridos</p></div>
         <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>
       </header>
-      <nav className="cmp-subnav" aria-label="Compras y abastecimiento">
-        <NavLink to="/compras" end>Compras</NavLink>
-        <span title="Se habilitará al integrar su rama">Proveedores</span>
-        <span title="Se habilitará al integrar su rama">Cuentas por pagar</span>
-      </nav>
+      <FrontBNav />
       <div className="cmp-stats">
         <article><span>Compras registradas</span><strong>{compras.length}</strong></article>
         <article><span>Recibidas</span><strong>{recibidas}</strong></article>
