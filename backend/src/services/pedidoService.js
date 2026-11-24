@@ -3,6 +3,7 @@ const { ejecutarEnTransaccion } = require('../config/transaccion');
 const correlativoRepository = require('../repositories/correlativoRepository');
 const pedidoRepository = require('../repositories/pedidoRepository');
 const productoRepository = require('../repositories/productoRepository');
+const clienteRepository = require('../repositories/clienteRepository');
 const { httpError } = require('../utils/httpError');
 const { agruparItems, calcularTotales, formatearNumero } = require('../utils/totales');
 const { rangoDeFechas } = require('../utils/fechas');
@@ -26,9 +27,52 @@ async function siguienteCorrelativo(tipo, sucursal, transaccion) {
   return numero;
 }
 
+// Valida al cliente y obtiene los datos que se guardarán en el comprobante.
+async function obtenerDatosCliente(datos) {
+  if (datos.clienteId == null) {
+    if (datos.tipoComprobante === 'credito-fiscal') {
+      throw httpError(400, 'El crédito fiscal requiere un cliente');
+    }
+
+    return {};
+  }
+
+  const cliente = await clienteRepository.buscarPorId(datos.clienteId);
+
+  if (!cliente || !cliente.activo) {
+    throw httpError(404, 'Cliente no encontrado o inactivo');
+  }
+
+  // Para emitir un crédito fiscal se requieren los datos fiscales completos.
+  if (datos.tipoComprobante === 'credito-fiscal') {
+    const campos = [
+      cliente.nombre,
+      cliente.nit,
+      cliente.nrc,
+      cliente.giro,
+      cliente.direccion,
+    ];
+
+    if (campos.some((campo) => !campo || !campo.trim())) {
+      throw httpError(400, 'El cliente no tiene sus datos fiscales completos');
+    }
+  }
+
+  // Se conserva una copia de los datos del cliente al momento de la venta.
+  return {
+    clienteId: cliente.id,
+    clienteNombre: cliente.nombre,
+    clienteNit: cliente.nit,
+    clienteNrc: cliente.nrc,
+    clienteGiro: cliente.giro,
+    clienteDireccion: cliente.direccion,
+  };
+}
+
 // datos: body ya validado por Zod. contexto: { usuarioId, sucursal } (salen del token JWT).
 async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECTO } = {}) {
   const itemsAgrupados = agruparItems(datos.items);
+  const datosCliente = await obtenerDatosCliente(datos);
 
   // Todo lo que sigue es "todo o nada": si algo falla se deshace y no se gasta ningún correlativo.
   return ejecutarEnTransaccion(async (transaccion) => {
@@ -37,28 +81,39 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
       itemsAgrupados.map((item) => item.productoId),
       transaccion,
     );
-    const productosPorId = new Map(productos.map((producto) => [producto.id, producto]));
+
+    const productosPorId = new Map(
+      productos.map((producto) => [producto.id, producto])
+    );
 
     // 2. Validar que todos existan y armar las líneas con el precio real.
     const lineas = itemsAgrupados.map((item) => {
       const producto = productosPorId.get(item.productoId);
+
       if (!producto) {
         throw httpError(400, `El producto ${item.productoId} no existe o no está disponible`);
       }
-      return { ...producto, productoId: item.productoId, cantidad: item.cantidad };
+
+      return {
+        ...producto,
+        productoId: item.productoId,
+        cantidad: item.cantidad
+      };
     });
 
     // 3. Calcular subtotal, IVA (13%) y total en el servidor.
     const { subtotalCents, ivaCents, totalCents } = calcularTotales(lineas);
 
-    // TODO (decisión del equipo): aquí se llamará a descontarStockPorVenta(transaccion, lineas) de Back C
-    //   y se validará que la caja esté abierta (409 si está cerrada) con el módulo de Back D.
-
     // 4. Correlativos: número de pedido y número del comprobante (cada tipo con su propio contador).
     const numero = await siguienteCorrelativo('pedido', sucursal, transaccion);
-    const numeroComprobante = await siguienteCorrelativo(datos.tipoComprobante, sucursal, transaccion);
 
-    // 5. Guardar el pedido y su detalle.
+    const numeroComprobante = await siguienteCorrelativo(
+      datos.tipoComprobante,
+      sucursal,
+      transaccion
+    );
+
+    // 5. Guardar el pedido, los datos del cliente y su detalle.
     const { id, fecha } = await pedidoRepository.insertar(
       {
         numero,
@@ -72,6 +127,7 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
         ivaCents,
         totalCents,
         usuarioId,
+        ...datosCliente,
       },
       transaccion,
     );
@@ -119,6 +175,7 @@ async function listarPedidos(filtros = {}) {
   const limite = filtros.limite ?? 20;
 
   let rango;
+
   try {
     rango = rangoDeFechas(filtros.desde, filtros.hasta);
   } catch (error) {
@@ -136,30 +193,45 @@ async function listarPedidos(filtros = {}) {
     limite,
   });
 
-  return { total, pagina, limite, pedidos: filas.map(darFormato) };
+  return {
+    total,
+    pagina,
+    limite,
+    pedidos: filas.map(darFormato)
+  };
 }
 
 // Un pedido con sus líneas. 404 si no existe.
 async function obtenerPedido(id) {
   const pedido = await pedidoRepository.obtenerPorId(id);
+
   if (!pedido) {
     throw httpError(404, 'Pedido no encontrado');
   }
 
   const items = await pedidoRepository.obtenerDetalle(id);
-  return { ...darFormato(pedido), items };
+
+  return {
+    ...darFormato(pedido),
+    items
+  };
 }
 
 // Anula el pedido (no lo borra). 404 si no existe, 409 si ya estaba anulado.
 async function anularPedido(id, { usuarioId = null, motivo } = {}) {
   return ejecutarEnTransaccion(async (transaccion) => {
-    const anulado = await pedidoRepository.anular({ id, usuarioId, motivo }, transaccion);
+    const anulado = await pedidoRepository.anular(
+      { id, usuarioId, motivo },
+      transaccion
+    );
 
     if (!anulado) {
       const existente = await pedidoRepository.obtenerPorId(id, transaccion);
+
       if (!existente) {
         throw httpError(404, 'Pedido no encontrado');
       }
+
       throw httpError(409, 'El pedido ya estaba anulado');
     }
 
@@ -168,6 +240,7 @@ async function anularPedido(id, { usuarioId = null, motivo } = {}) {
     // Los correlativos (pedido y comprobante) NO se reutilizan: el documento anulado sigue existiendo.
 
     const pedido = await pedidoRepository.obtenerPorId(id, transaccion);
+
     return darFormato(pedido);
   });
 }

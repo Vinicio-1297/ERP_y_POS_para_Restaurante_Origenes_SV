@@ -10,6 +10,7 @@ const pedidoSchema = z
   .object({
     tipoServicio: z.enum(['llevar', 'aqui']),
     tipoComprobante: z.enum(['consumidor-final', 'credito-fiscal']),
+    clienteId: z.number().int().positive().max(2147483647).optional(),
     metodoPago: z.enum(['efectivo', 'tarjeta', 'digital']),
     // Opcional: con qué se hizo el pago digital. Si el front no lo manda, queda como "digital" a secas.
     proveedorDigital: z.enum(['bitcoin', 'chivo']).optional(),
@@ -27,6 +28,11 @@ const pedidoSchema = z
   .refine((pedido) => !pedido.proveedorDigital || pedido.metodoPago === 'digital', {
     message: 'proveedorDigital solo aplica cuando metodoPago es "digital"',
     path: ['proveedorDigital'],
+  })
+  // El crédito fiscal requiere un cliente registrado
+  .refine((pedido) => pedido.tipoComprobante !== 'credito-fiscal' || pedido.clienteId !== undefined, {
+    message: 'El crédito fiscal requiere un cliente',
+    path: ['clienteId'],
   });
 
 // Filtros del listado. Todo llega como texto; los vacíos ("?estado=") se aceptan y se ignoran.

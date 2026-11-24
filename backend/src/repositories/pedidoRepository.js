@@ -18,14 +18,25 @@ async function insertar(datos, transaccion) {
     .input('ivaCents', sql.Int, datos.ivaCents)
     .input('totalCents', sql.Int, datos.totalCents)
     .input('usuarioId', sql.Int, datos.usuarioId ?? null)
+    // Datos del cliente al momento de realizar la venta.
+    .input('clienteId', sql.Int, datos.clienteId ?? null)
+    .input('clienteNombre', sql.NVarChar(150), datos.clienteNombre ?? null)
+    .input('clienteNit', sql.NVarChar(20), datos.clienteNit ?? null)
+    .input('clienteNrc', sql.NVarChar(20), datos.clienteNrc ?? null)
+    .input('clienteGiro', sql.NVarChar(200), datos.clienteGiro ?? null)
+    .input('clienteDireccion', sql.NVarChar(250), datos.clienteDireccion ?? null)
     .query(`
       INSERT INTO dbo.pedidos
         (numero, sucursal, tipo_servicio, tipo_comprobante, numero_comprobante,
-         metodo_pago, proveedor_digital, subtotal_cents, iva_cents, total_cents, usuario_id)
+         metodo_pago, proveedor_digital, subtotal_cents, iva_cents, total_cents,
+         usuario_id, cliente_id, cliente_nombre, cliente_nit, cliente_nrc,
+         cliente_giro, cliente_direccion)
       OUTPUT inserted.id, inserted.fecha
       VALUES
         (@numero, @sucursal, @tipoServicio, @tipoComprobante, @numeroComprobante,
-         @metodoPago, @proveedorDigital, @subtotalCents, @ivaCents, @totalCents, @usuarioId)
+         @metodoPago, @proveedorDigital, @subtotalCents, @ivaCents, @totalCents,
+         @usuarioId, @clienteId, @clienteNombre, @clienteNit, @clienteNrc,
+         @clienteGiro, @clienteDireccion)
     `);
 
   return resultado.recordset[0];
@@ -74,22 +85,27 @@ async function listar(filtros, transaccion) {
     request.input('sucursal', sql.NVarChar(100), filtros.sucursal);
     condiciones.push('sucursal = @sucursal');
   }
+
   if (filtros.desde) {
     request.input('desde', sql.DateTime2, filtros.desde);
     condiciones.push('fecha >= @desde');
   }
+
   if (filtros.hasta) {
     request.input('hasta', sql.DateTime2, filtros.hasta);
     condiciones.push('fecha < @hasta');
   }
+
   if (filtros.tipoComprobante) {
     request.input('tipoComprobante', sql.VarChar(20), filtros.tipoComprobante);
     condiciones.push('tipo_comprobante = @tipoComprobante');
   }
+
   if (filtros.metodoPago) {
     request.input('metodoPago', sql.VarChar(10), filtros.metodoPago);
     condiciones.push('metodo_pago = @metodoPago');
   }
+
   if (filtros.estado) {
     request.input('estado', sql.VarChar(10), filtros.estado);
     condiciones.push('estado = @estado');
@@ -110,16 +126,26 @@ async function listar(filtros, transaccion) {
     SELECT COUNT(*) AS total FROM dbo.pedidos WHERE ${donde};
   `);
 
-  return { filas: resultado.recordsets[0], total: resultado.recordsets[1][0].total };
+  return {
+    filas: resultado.recordsets[0],
+    total: resultado.recordsets[1][0].total
+  };
 }
 
 // Un pedido (encabezado) o null si no existe.
 async function obtenerPorId(id, transaccion) {
   const request = await crearRequest(transaccion);
+
   const resultado = await request.input('id', sql.Int, id).query(`
     SELECT ${COLUMNAS_PEDIDO},
            anulado_en       AS anuladoEn,
-           motivo_anulacion AS motivoAnulacion
+           motivo_anulacion AS motivoAnulacion,
+           cliente_id       AS clienteId,
+           cliente_nombre   AS clienteNombre,
+           cliente_nit      AS clienteNit,
+           cliente_nrc      AS clienteNrc,
+           cliente_giro     AS clienteGiro,
+           cliente_direccion AS clienteDireccion
     FROM dbo.pedidos
     WHERE id = @id
   `);
@@ -164,4 +190,11 @@ async function anular({ id, usuarioId, motivo }, transaccion) {
   return resultado.recordset[0] ?? null;
 }
 
-module.exports = { insertar, insertarDetalle, listar, obtenerPorId, obtenerDetalle, anular };
+module.exports = {
+  insertar,
+  insertarDetalle,
+  listar,
+  obtenerPorId,
+  obtenerDetalle,
+  anular
+};
