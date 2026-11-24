@@ -12,6 +12,7 @@
     "db:pos": "node scripts/runSql.js ../database/pos ../database/pos/seed",
     "db:caja": "node scripts/runSql.js ../database/caja",
     "dev:token": "node scripts/devToken.js",
+    "db:rrhh": "node scripts/runSql.js ../database/rrhh ../database/rrhh/seed",
     "db:soporte": "node scripts/runSql.js ../database/soporte ../database/soporte/seed",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/runSql.js ../database/soporte/seed"
