@@ -4,6 +4,7 @@ import HealthPage from '../pages/HealthPage.jsx';
 import LoginPage from '../pages/LoginPage.jsx';
 import PlaceholderPage from '../pages/PlaceHolder.jsx';
 import PosPage from '../pages/posPage.jsx';
+import InventarioPage from '../pages/InventarioPage.jsx';
 
 export default function AppRoutes() {
   return (
@@ -12,7 +13,7 @@ export default function AppRoutes() {
       <Route path="/health" element={<HealthPage />} />
       <Route element={<AppLayout />}>
         <Route path="/pos" element={<PosPage />} />
-        <Route path="/inventario" element={<PlaceholderPage title="Inventario" />} />
+        <Route path="/inventario" element={<InventarioPage />} />
         <Route path="/compras" element={<PlaceholderPage title="Compras" />} />
         <Route path="/pedidos" element={<PlaceholderPage title="Pedidos" />} />
         <Route path="/caja" element={<PlaceholderPage title="Caja" />} />
