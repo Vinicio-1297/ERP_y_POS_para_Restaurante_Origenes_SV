@@ -7,6 +7,8 @@ const { rateLimit } = require('express-rate-limit');
 const healthRoutes = require('./routes/healthRoutes');
 const posRoutes = require('./routes/posRoutes');
 const authRoutes = require('./routes/authRoutes');
+const clienteRoutes = require('./routes/clienteRoutes');
+const sucursalRoutes = require('./routes/sucursalRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -18,6 +20,8 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use('/api', healthRoutes);
 app.use('/api', authRoutes);
+app.use('/api', clienteRoutes);
+app.use('/api', sucursalRoutes);
 app.use('/api', posRoutes);
 app.use(errorHandler);
 
