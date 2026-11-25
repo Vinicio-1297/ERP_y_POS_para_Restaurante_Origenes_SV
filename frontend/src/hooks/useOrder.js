@@ -7,6 +7,7 @@ export default function useOrder() {
   const [serviceType, setServiceType] = useState('aqui'); // 'llevar' | 'aqui'
   const [receiptType, setReceiptType] = useState('consumidor-final'); // 'consumidor-final' | 'credito-fiscal'
   const [paymentMethod, setPaymentMethod] = useState('efectivo'); // 'efectivo' | 'tarjeta' | 'digital'
+  const [clienteId, setClienteId] = useState(null); 
 
   const totals = useMemo(() => calculateTotals(items), [items]);
 
@@ -33,7 +34,10 @@ export default function useOrder() {
   }
 
   function clearOrder() {
+    function clearOrder() {
     setItems([]);
+    setClienteId(null);
+}
   }
 
   return {
@@ -49,5 +53,8 @@ export default function useOrder() {
     changeQuantity,
     removeProduct,
     clearOrder,
+    clienteId,
+    setClienteId,
+    
   };
 }

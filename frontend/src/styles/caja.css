@@ -1,0 +1,40 @@
+/* Caja: usa las variables de color del tema (definidas en .app-shell, pos.css). */
+.caja-page {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  padding: 1.5rem;
+  color: #2b2118;
+}
+
+.caja-page h1 { color: var(--c-brand); font-size: 1.8rem; margin: 0; }
+.caja-page h2 { color: var(--c-brand); font-size: 1.3rem; }
+.caja-page h3 { color: var(--c-brand); font-size: 1.05rem; }
+
+.caja-card {
+  padding: 1.25rem;
+  border-radius: 16px;
+  background: var(--c-cream);
+  border: 1px solid rgba(142, 63, 44, 0.25);
+}
+
+.caja-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.caja-side { display: grid; gap: 1rem; }
+
+.caja-note { font-size: 0.88rem; opacity: 0.8; }
+
+.caja-table { --bs-table-bg: transparent; }
+
+.caja-diff--ok { color: #2f6b3a; font-weight: 600; }
+.caja-diff--sobra { color: #8a5a00; font-weight: 600; }
+.caja-diff--falta { color: #a02020; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .caja-grid { grid-template-columns: 1fr; }
+}

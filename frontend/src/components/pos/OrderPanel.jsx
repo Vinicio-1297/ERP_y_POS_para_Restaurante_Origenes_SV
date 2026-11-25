@@ -36,7 +36,7 @@ function OptionGroup({ options, value, onChange, label }) {
   );
 }
 
-export default function OrderPanel({ orderNumber, order, onProcessSale }) {
+export default function OrderPanel({ orderNumber, order, onProcessSale, clientes = [] }) {
   const { items, totals, serviceType, receiptType, paymentMethod } = order;
 
   return (
@@ -63,9 +63,9 @@ export default function OrderPanel({ orderNumber, order, onProcessSale }) {
         {items.length === 0 && <li className="order-empty">Agrega productos del menú</li>}
         {items.map((item) => (
           <li key={item.id} className="order-item">
-            <div className="order-item-photo" aria-hidden="true">  
+            <div className="order-item-photo" aria-hidden="true">
               <ProductPhoto image={item.image} emoji={item.emoji} />
-              </div>
+            </div>
             <div className="order-item-name">
               <strong>{item.name}</strong>
               <small>{formatCents(item.priceCents)}$/u</small>
@@ -97,12 +97,34 @@ export default function OrderPanel({ orderNumber, order, onProcessSale }) {
       <section className="order-checkout">
         <p>Tipo de comprobante</p>
         <OptionGroup options={RECEIPT_TYPES} value={receiptType} onChange={order.setReceiptType} label="Tipo de comprobante" />
+        {receiptType === 'credito-fiscal' && (
+          <>
+            <p>Cliente</p>
+            <select
+              className="form-select"
+              aria-label="Cliente"
+              value={order.clienteId ?? ''}
+              onChange={(event) => order.setClienteId(event.target.value ? Number(event.target.value) : null)}
+            >
+              <option value="">Selecciona un cliente</option>
+              {clientes.map((cliente) => (
+                <option key={cliente.id} value={cliente.id}>
+                  {cliente.nombre} — NIT {cliente.nit}
+                </option>
+              ))}
+            </select>
+            {clientes.length === 0 && <small>No hay clientes con datos fiscales completos.</small>}
+          </>
+        )}
         <p>Método de pago</p>
         <OptionGroup options={PAYMENT_METHODS} value={paymentMethod} onChange={order.setPaymentMethod} label="Método de pago" />
-        <button type="button" className="process-sale" disabled={items.length === 0} onClick={onProcessSale}>
+        <button type="button" className="process-sale" disabled={items.length === 0 || (receiptType === 'credito-fiscal' && !order.clienteId)} onClick={onProcessSale}>
           💳 Procesar venta
         </button>
       </section>
     </aside>
   );
 }
+
+
+  
