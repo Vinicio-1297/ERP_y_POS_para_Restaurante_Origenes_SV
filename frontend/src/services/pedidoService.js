@@ -19,3 +19,18 @@ export async function crearPedido(pedido, signal) {
 
   return result;
 }
+
+export async function obtenerProximoNumero(signal) {
+  const token = sessionStorage.getItem('origenes.token');
+  const response = await fetch(`${apiUrl}/pedidos/proximo-numero`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(result?.message || `No se pudo obtener el número de pedido (HTTP ${response.status})`);
+  }
+
+  return result.numero;
+}
