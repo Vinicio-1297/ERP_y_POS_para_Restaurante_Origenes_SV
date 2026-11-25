@@ -1,0 +1,69 @@
+/* RRHH y Nómina: usa las variables de color del tema (definidas en .app-shell, pos.css). */
+.rrhh-page {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  padding: 1.5rem;
+  color: #2b2118;
+}
+
+.rrhh-page h1 { color: var(--c-brand); font-size: 1.8rem; margin: 0; }
+.rrhh-page h2 { color: var(--c-brand); font-size: 1.3rem; }
+.rrhh-page h3 { color: var(--c-brand); font-size: 1.05rem; }
+.rrhh-page h4 { color: var(--c-brand); font-size: 0.98rem; }
+
+.rrhh-card {
+  padding: 1.25rem;
+  border-radius: 16px;
+  background: var(--c-cream);
+  border: 1px solid rgba(142, 63, 44, 0.25);
+}
+
+.rrhh-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.rrhh-note { font-size: 0.88rem; opacity: 0.8; }
+
+.rrhh-table { --bs-table-bg: transparent; }
+
+.rrhh-boleta {
+  padding: 1rem;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px dashed rgba(142, 63, 44, 0.45);
+}
+
+@media (max-width: 960px) {
+  .rrhh-grid { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .no-print,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  .rrhh-page {
+    padding: 0;
+  }
+
+  .rrhh-card:has(.rrhh-boleta) {
+    border: none;
+    background: #fff;
+    padding: 0;
+  }
+
+  .rrhh-card:not(:has(.rrhh-boleta)) {
+    display: none;
+  }
+
+  .rrhh-boleta {
+    border: 1px solid #000;
+  }
+}
