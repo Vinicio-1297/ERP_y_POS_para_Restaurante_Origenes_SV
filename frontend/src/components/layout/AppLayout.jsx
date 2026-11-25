@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import formatToday from '../../utils/formatToday.js';
 import { UncontrolledDropdown, DropdownToggle, DropdownMenu, DropdownItem } from 'reactstrap';
 import '../../styles/pos.css';
@@ -15,6 +15,23 @@ const NAV_ITEMS = [
 
 export default function AppLayout() {
   const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+
+  // Obtiene los datos del usuario que inicio sesion.
+  const [usuario] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('origenes.usuario'));
+    } catch {
+      return null;
+    }
+  });
+
+  // Elimina los datos de la sesion y regresa al login.
+  function cerrarSesion() {
+    sessionStorage.removeItem('origenes.token');
+    sessionStorage.removeItem('origenes.usuario');
+    navigate('/login', { replace: true });
+  }
 
   return (
     <div className="app-shell">
@@ -33,13 +50,13 @@ export default function AppLayout() {
         <div className="app-user">
           <button type="button" className="app-bell" aria-label="Notificaciones">🔔</button>
           <span aria-hidden="true">👤</span>
-          {/* Se reemplaza por el usuario autenticado cuando exista el login. */}
+          {/* Muestra el nombre del usuario autenticado. */}
           <UncontrolledDropdown>
             <DropdownToggle caret tag="button" type="button" className="app-user-name">
-              Usuario: Administrador
+              Usuario: {usuario?.nombre || 'Sin sesión'}
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem onClick={() => navigate('/login')}>
+              <DropdownItem onClick={cerrarSesion}>
                 Cerrar sesión
               </DropdownItem>
             </DropdownMenu>
