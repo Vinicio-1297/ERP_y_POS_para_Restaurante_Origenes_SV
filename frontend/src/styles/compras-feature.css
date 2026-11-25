@@ -9,7 +9,6 @@
 .cmp-overlay{position:fixed;inset:0;z-index:1000;background:rgba(43,28,20,.52);display:flex;align-items:center;justify-content:center;padding:20px}.cmp-dialog{max-width:820px;width:100%;max-height:92vh;overflow-y:auto;background:#fff2d5;border-radius:16px;padding:24px}.cmp-dialog-head{display:flex;justify-content:space-between;align-items:center}.cmp-dialog-head h2{margin:0 0 18px;color:#a45038}.cmp-close{border:0;background:transparent;font-size:28px;color:#a45038;cursor:pointer}.cmp-form{display:grid;gap:16px}.cmp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.cmp-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}.cmp-form input,.cmp-form select{width:100%;border:1px solid #dec49e;background:#fffaf0;padding:10px;border-radius:9px;color:#573a2e}.cmp-detail{border:1px solid #e6c79d;border-radius:12px;padding:15px}.cmp-detail legend{padding:0 6px;font-weight:700;color:#a45038}.cmp-helper{font-size:12px;color:#855e47;margin:3px 0 13px}.cmp-add-row{display:flex;align-items:end;gap:10px;margin-top:14px;flex-wrap:wrap}.cmp-add-row label{flex:1;min-width:140px}.cmp-secondary{background:#f3dbb6;color:#844430;border:1px solid #d8b484;border-radius:9px;padding:11px 15px;cursor:pointer}.cmp-lines{padding:0;list-style:none;margin:15px 0}.cmp-lines li{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #e8d0ab;padding:8px 0;font-size:14px}.cmp-total{display:block;text-align:right;padding:12px 0;color:#a45038}.cmp-error{color:#a33232;font-weight:650;margin:0}.cmp-form-actions{display:flex;justify-content:flex-end;gap:10px}
 @media(max-width:850px){.cmp-page{padding:18px}.cmp-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.cmp-header,.cmp-panel-head{align-items:stretch;flex-direction:column}.cmp-grid{grid-template-columns:1fr}.cmp-stats strong{font-size:23px}}@media(max-width:450px){.cmp-stats{grid-template-columns:1fr}.cmp-filters input{min-width:0;width:100%}}
 
-/* Front B: controles accesibles también junto a la tabla */
 .frontb-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .frontb-panel-actions h2 { margin: 0; }
 
@@ -19,7 +18,8 @@
 .cmp-table-wrap table { min-width: 780px; }
 .cmp-actions { min-width: 160px; }
 
-/* Front B: permitir scroll horizontal sin cortar los botones de la tabla. */
 .cmp-page, .cmp-panel { min-width: 0; }
 .cmp-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .cmp-actions { display: flex; width: max-content; gap: 8px; flex-wrap: nowrap; }
+
+.cmp-warning { padding: 13px 16px; border: 1px solid #dcbf96; background: #fff2d5; border-radius: 10px; color: #794c36; margin: 4px 0 18px; line-height: 1.5; }

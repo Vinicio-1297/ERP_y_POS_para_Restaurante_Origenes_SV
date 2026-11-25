@@ -47,7 +47,6 @@
 .rec-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 @media (max-width: 750px) { .rec-page { padding: 18px; } .rec-header, .rec-panel-head { flex-direction: column; align-items: stretch; } .rec-stats { grid-template-columns: 1fr; } .rec-add-row { grid-template-columns: 1fr; } .rec-subnav { flex-wrap: wrap; } }
 
-/* Front B: controles accesibles también junto a la tabla */
 .frontb-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .frontb-panel-actions h2 { margin: 0; }
 
@@ -56,9 +55,10 @@
 .rec-table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .rec-table-wrap table { min-width: 760px; }
 
-/* Front B: controles y acciones visibles con pantallas estrechas. */
 .rec-page, .rec-panel { min-width: 0; }
 .rec-panel-head { flex-wrap: wrap; }
 .rec-panel-head input { max-width: 100%; min-width: min(240px, 100%); }
 .rec-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .rec-table-wrap td:last-child { white-space: nowrap; }
+
+.rec-notice { padding: 13px 17px; border-radius: 12px; background: #fff2d5; border: 1px solid #dec49e; color: #74442e; line-height: 1.5; margin: 0 0 18px; }

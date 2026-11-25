@@ -1,33 +1,35 @@
 import { useEffect, useMemo, useState } from 'react';
+import useFrontBModal from '../hooks/useFrontBModal.js';
+import { proveedoresService } from '../services/frontbRepos.js';
+import { newFrontBId } from '../utils/frontbUtils.js';
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/proveedores-feature.css';
 
-const CLAVE = 'origenes_proveedores_feature_v1';
-const ID = () => globalThis.crypto?.randomUUID?.() ?? `prov-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '', diasCredito: '0', estado: 'Activo' });
 
-function leer() {
-  try {
-    const datos = JSON.parse(window.localStorage.getItem(CLAVE) || '[]');
-    return Array.isArray(datos) ? datos : [];
-  } catch { return []; }
+function telefonoNacional(valor) {
+  const actual = String(valor || '').trim();
+  const sinPrefijo = actual.replace(/^\+503[\s-]*/, '');
+  const soloDigitos = sinPrefijo.replace(/[\s-]/g, '');
+  return /^\d{8}$/.test(soloDigitos)
+    ? `${soloDigitos.slice(0, 4)}-${soloDigitos.slice(4)}`
+    : actual;
 }
 
 function validar(form, proveedores, editando) {
   if (!form.nombre.trim()) return 'Ingresá el nombre del proveedor.';
   if (!form.contacto.trim()) return 'Ingresá una persona de contacto.';
   if (!form.telefono.trim()) return 'Ingresá un teléfono.';
-  if (!/^[+()\d\s.-]{7,30}$/.test(form.telefono.trim())) return 'Ingresá un teléfono válido (mínimo 7 caracteres).';
   if (form.correo.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo.trim())) return 'Ingresá un correo válido.';
   const dias = Number(form.diasCredito);
-  if (!Number.isInteger(dias) || dias < 0 || dias > 365) return 'Los días de crédito deben estar entre 0 y 365.';
+  if (String(form.diasCredito).trim() === '' || !Number.isInteger(dias) || dias < 0 || dias > 365) return 'Los días de crédito deben estar entre 0 y 365.';
   if (proveedores.some(p => p.id !== editando && p.nombre.trim().toLowerCase() === form.nombre.trim().toLowerCase())) return 'Ya existe un proveedor con ese nombre.';
   if (form.nit.trim() && proveedores.some(p => p.id !== editando && p.nit && p.nit.trim().toLowerCase() === form.nit.trim().toLowerCase())) return 'Ya existe un proveedor con ese NIT.';
   return '';
 }
 
 export default function ProveedoresPage() {
-  const [proveedores, setProveedores] = useState(leer);
+  const [proveedores, setProveedores] = useState(proveedoresService.list);
   const [buscar, setBuscar] = useState('');
   const [filtro, setFiltro] = useState('Todos');
   const [modal, setModal] = useState(false);
@@ -35,7 +37,9 @@ export default function ProveedoresPage() {
   const [form, setForm] = useState(VACIO);
   const [error, setError] = useState('');
 
-  useEffect(() => { window.localStorage.setItem(CLAVE, JSON.stringify(proveedores)); }, [proveedores]);
+  useEffect(() => { proveedoresService.save(proveedores); }, [proveedores]);
+  const close = () => { setModal(false); setError(''); };
+  const dialogRef = useFrontBModal(modal, close);
 
   const lista = useMemo(() => proveedores.filter(p => {
     const coincideEstado = filtro === 'Todos' || p.estado === filtro;
@@ -49,15 +53,16 @@ export default function ProveedoresPage() {
 
   function abrir(p = null) {
     setEditando(p?.id ?? null);
-    setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: p.telefono || '', correo: p.correo || '', direccion: p.direccion || '', diasCredito: String(p.diasCredito ?? 0), estado: p.estado } : VACIO());
+    setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: telefonoNacional(p.telefono), correo: p.correo || '', direccion: p.direccion || '', diasCredito: String(p.diasCredito ?? 0), estado: p.estado } : VACIO());
     setError(''); setModal(true);
   }
   function guardar(e) {
     e.preventDefault();
+    if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) return;
     const mensaje = validar(form, proveedores, editando);
     if (mensaje) { setError(mensaje); return; }
     const item = {
-      id: editando || ID(),
+      id: editando || newFrontBId('prov'),
       nombre: form.nombre.trim(), nit: form.nit.trim(), contacto: form.contacto.trim(),
       telefono: form.telefono.trim(), correo: form.correo.trim(), direccion: form.direccion.trim(),
       diasCredito: Number(form.diasCredito), estado: form.estado,
@@ -93,22 +98,22 @@ export default function ProveedoresPage() {
             <tr key={p.id}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td>{p.diasCredito ? `${p.diasCredito} días` : 'Contado'}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" onClick={() => abrir(p)}>Editar</button><button type="button" onClick={() => cambiarEstado(p)}>{p.estado === 'Activo' ? 'Desactivar' : 'Activar'}</button></div></td></tr>
           ))}</tbody></table></div>
       </div>
-      {modal && <div className="prv-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
-        <div className="prv-dialog" role="dialog" aria-modal="true" aria-labelledby="prv-dialog-title">
-          <div className="prv-dialog-head"><h2 id="prv-dialog-title">{editando ? 'Editar proveedor' : 'Nuevo proveedor'}</h2><button className="prv-close" aria-label="Cerrar" type="button" onClick={() => setModal(false)}>×</button></div>
+      {modal && <div className="prv-overlay" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
+        <div className="prv-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="prv-dialog-title">
+          <div className="prv-dialog-head"><h2 id="prv-dialog-title">{editando ? 'Editar proveedor' : 'Nuevo proveedor'}</h2><button className="prv-close" aria-label="Cerrar" type="button" onClick={close}>×</button></div>
           <form onSubmit={guardar} className="prv-form">
             <div className="prv-grid">
               <label>Nombre del proveedor *<input required autoFocus maxLength={120} value={form.nombre} onChange={e => setForm(v => ({ ...v, nombre: e.target.value }))} /></label>
               <label>NIT<input maxLength={35} value={form.nit} onChange={e => setForm(v => ({ ...v, nit: e.target.value }))} /></label>
               <label>Persona de contacto *<input required maxLength={100} value={form.contacto} onChange={e => setForm(v => ({ ...v, contacto: e.target.value }))} /></label>
-              <label>Teléfono *<input required type="tel" maxLength={30} value={form.telefono} onChange={e => setForm(v => ({ ...v, telefono: e.target.value }))} /></label>
+              <label>Teléfono *<input required type="tel" maxLength={9} pattern="[0-9]{4}-?[0-9]{4}" title="Ingresá 8 dígitos, por ejemplo 7123-4567" placeholder="7123-4567" value={form.telefono} onChange={e => setForm(v => ({ ...v, telefono: e.target.value }))} /></label>
               <label>Correo electrónico<input type="email" maxLength={120} value={form.correo} onChange={e => setForm(v => ({ ...v, correo: e.target.value }))} /></label>
               <label>Días de crédito<input type="number" min="0" max="365" step="1" required value={form.diasCredito} onChange={e => setForm(v => ({ ...v, diasCredito: e.target.value }))} /></label>
               <label className="prv-wide">Dirección<input maxLength={250} value={form.direccion} onChange={e => setForm(v => ({ ...v, direccion: e.target.value }))} /></label>
               <label>Estado<select value={form.estado} onChange={e => setForm(v => ({ ...v, estado: e.target.value }))}><option>Activo</option><option>Inactivo</option></select></label>
             </div>
             {error && <p className="prv-error" role="alert">{error}</p>}
-            <div className="prv-form-actions"><button type="button" className="prv-secondary" onClick={() => setModal(false)}>Cancelar</button><button type="submit" className="prv-primary">Guardar proveedor</button></div>
+            <div className="prv-form-actions"><button type="button" className="prv-secondary" onClick={close}>Cancelar</button><button type="submit" className="prv-primary">Guardar proveedor</button></div>
           </form>
         </div>
       </div>}

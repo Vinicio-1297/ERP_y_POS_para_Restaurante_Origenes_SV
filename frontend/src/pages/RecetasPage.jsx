@@ -1,30 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import useFrontBModal from '../hooks/useFrontBModal.js';
+import { inventarioService, recetasService } from '../services/frontbRepos.js';
+import { STORE_KEYS, subscribeRows, validQuantity, newFrontBId } from '../utils/frontbUtils.js';
 import { products as posProducts } from '../data/mockMenu.js';
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/recetas-feature.css';
-
-// Claves de la fase de integración. Reemplazar por servicios REST cuando el backend esté listo.
-const RECIPES_KEY = 'origenes_recetas_feature_v1';
-const INVENTORY_KEY = 'origenes_inventario_feature_v1';
-
-function readArray(key) {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
-}
 
 function freshForm() {
   return { productoId: '', rendimiento: '1', ingredientes: [] };
 }
 
-function generateId() {
-  return globalThis.crypto?.randomUUID?.() || `receta-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 export default function RecetasPage() {
-  const [recetas, setRecetas] = useState(() => readArray(RECIPES_KEY));
-  const [insumos, setInsumos] = useState(() => readArray(INVENTORY_KEY));
+  const [recetas, setRecetas] = useState(recetasService.list);
+  const [insumos, setInsumos] = useState(inventarioService.list);
   const [buscar, setBuscar] = useState('');
   const [visible, setVisible] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -33,15 +21,10 @@ export default function RecetasPage() {
   const [cantidad, setCantidad] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => { window.localStorage.setItem(RECIPES_KEY, JSON.stringify(recetas)); }, [recetas]);
-  useEffect(() => {
-    function reload(event) {
-      if (!event || event.type === 'focus' || event.key === INVENTORY_KEY) setInsumos(readArray(INVENTORY_KEY));
-    }
-    window.addEventListener('storage', reload);
-    window.addEventListener('focus', reload);
-    return () => { window.removeEventListener('storage', reload); window.removeEventListener('focus', reload); };
-  }, []);
+  useEffect(() => { recetasService.save(recetas); }, [recetas]);
+  useEffect(() => subscribeRows(STORE_KEYS.inventario, () => setInsumos(inventarioService.list())), []);
+  const close = () => { setVisible(false); setError(''); };
+  const dialogRef = useFrontBModal(visible, close);
 
   const disponibles = useMemo(() => insumos.filter(i => i.tipo === 'insumo'), [insumos]);
   const porId = useMemo(() => new Map(posProducts.map(p => [String(p.id), p])), []);
@@ -55,14 +38,14 @@ export default function RecetasPage() {
     setEditingId(receta?.id || null);
     setForm(receta ? { productoId: String(receta.productoId), rendimiento: String(receta.rendimiento), ingredientes: receta.ingredientes.map(i => ({ ...i })) } : freshForm());
     setInsumoId(''); setCantidad(''); setError('');
-    setInsumos(readArray(INVENTORY_KEY));
+    setInsumos(inventarioService.list());
     setVisible(true);
   }
 
   function agregar() {
     const item = insumosPorId.get(insumoId);
     const qty = Number(cantidad);
-    if (!item || cantidad.trim() === '' || !Number.isFinite(qty) || qty <= 0) {
+    if (!item || !validQuantity(cantidad, item?.unidad)) {
       setError('Seleccioná un insumo disponible e indicá una cantidad mayor que cero.'); return;
     }
     if (form.ingredientes.some(i => String(i.insumoId) === String(item.id))) {
@@ -85,10 +68,10 @@ export default function RecetasPage() {
       setError('Hay ingredientes que ya no existen en Inventario. Revisá la receta.'); return;
     }
     if (!form.ingredientes.length) { setError('Agregá al menos un ingrediente antes de guardar la receta.'); return; }
-    if (form.ingredientes.some(i => !Number.isFinite(Number(i.cantidad)) || Number(i.cantidad) <= 0)) {
+    if (form.ingredientes.some(i => !validQuantity(i.cantidad, insumosPorId.get(String(i.insumoId))?.unidad) || i.unidad !== insumosPorId.get(String(i.insumoId))?.unidad)) {
       setError('Todos los ingredientes deben tener cantidades válidas y positivas.'); return;
     }
-    const saved = { id: editingId || generateId(), productoId: id, rendimiento, ingredientes: form.ingredientes };
+    const saved = { id: editingId || newFrontBId('rec'), productoId: id, rendimiento, ingredientes: form.ingredientes };
     setRecetas(old => editingId ? old.map(r => r.id === editingId ? saved : r) : [...old, saved]);
     setVisible(false);
   }
@@ -98,6 +81,7 @@ export default function RecetasPage() {
     if (window.confirm(`¿Eliminar la receta de ${nombre}?`)) setRecetas(old => old.filter(r => r.id !== receta.id));
   }
 
+  const sinReceta = posProducts.filter(p => !recetas.some(r => String(r.productoId) === String(p.id)));
   const completas = recetas.filter(r => r.ingredientes.length > 0).length;
   return (
     <section className="rec-page">
@@ -108,8 +92,9 @@ export default function RecetasPage() {
       <div className="rec-stats">
         <article><span>Recetas registradas</span><strong>{recetas.length}</strong></article>
         <article><span>Con ingredientes</span><strong>{completas}</strong></article>
-        <article><span>Pendientes</span><strong>{recetas.length - completas}</strong></article>
+        <article><span>Productos sin receta</span><strong>{sinReceta.length}</strong></article>
       </div>
+      {sinReceta.length > 0 && <p className="rec-notice">Productos del menú sin receta: {sinReceta.map(p => p.name).join(', ')}. Este listado usa temporalmente el menú local del POS.</p>}
       <div className="rec-panel">
         <div className="rec-panel-head"><h2>Listado de recetas</h2><button type="button" className="rec-primary" onClick={() => abrir()}>+ Nueva receta</button><input type="search" aria-label="Buscar recetas" placeholder="Buscar producto..." value={buscar} onChange={e => setBuscar(e.target.value)} /></div>
         <div className="rec-table-wrap"><table><thead><tr><th>PRODUCTO DEL POS</th><th>CATEGORÍA</th><th>RENDIMIENTO</th><th>INGREDIENTES</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
@@ -119,9 +104,9 @@ export default function RecetasPage() {
           })}</tbody></table></div>
         {!filtradas.length && <p className="rec-empty">{buscar ? 'No hay recetas con ese nombre.' : 'Todavía no hay recetas. Creá la primera para empezar.'}</p>}
       </div>
-      {visible && <div className="rec-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setVisible(false); }}>
-        <div className="rec-dialog" role="dialog" aria-modal="true" aria-label={editingId ? 'Editar receta' : 'Nueva receta'}>
-          <div className="rec-dialog-head"><h2>{editingId ? 'Editar receta' : 'Nueva receta'}</h2><button type="button" className="rec-close" aria-label="Cerrar" onClick={() => setVisible(false)}>×</button></div>
+      {visible && <div className="rec-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
+        <div className="rec-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingId ? 'Editar receta' : 'Nueva receta'}>
+          <div className="rec-dialog-head"><h2>{editingId ? 'Editar receta' : 'Nueva receta'}</h2><button type="button" className="rec-close" aria-label="Cerrar" onClick={close}>×</button></div>
           <form onSubmit={guardar} className="rec-form">
             <label>Producto del POS<select required value={form.productoId} onChange={e => setForm(old => ({ ...old, productoId: e.target.value }))}>
               <option value="">Seleccioná un producto...</option>
@@ -135,13 +120,13 @@ export default function RecetasPage() {
                 <label>Insumo<select value={insumoId} onChange={e => setInsumoId(e.target.value)} disabled={!disponibles.length}>
                   <option value="">Seleccioná un insumo...</option>{disponibles.map(i => <option key={i.id} value={i.id}>{i.nombre} ({i.unidad})</option>)}
                 </select></label>
-                <label>Cantidad<input type="number" min="0" step="any" placeholder="Cantidad" value={cantidad} onChange={e => setCantidad(e.target.value)} disabled={!disponibles.length}/></label>
+                <label>Cantidad<input type="number" min="0" step={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : 'any'} placeholder="Cantidad" value={cantidad} onChange={e => setCantidad(e.target.value)} disabled={!disponibles.length}/></label>
                 <button type="button" className="rec-secondary" disabled={!disponibles.length} onClick={agregar}>Añadir</button>
               </div>
               <ul className="rec-list">{form.ingredientes.map(i => <li key={i.insumoId}><span>{insumosPorId.get(String(i.insumoId))?.nombre || 'Insumo no disponible'} — {i.cantidad} {i.unidad}</span><button type="button" className="rec-link rec-danger" onClick={() => setForm(old => ({ ...old, ingredientes: old.ingredientes.filter(x => x.insumoId !== i.insumoId) }))}>Quitar</button></li>)}</ul>
             </div>
             {error && <p role="alert" className="rec-error">{error}</p>}
-            <div className="rec-actions"><button type="button" className="rec-secondary" onClick={() => setVisible(false)}>Cancelar</button><button type="submit" className="rec-primary">Guardar receta</button></div>
+            <div className="rec-actions"><button type="button" className="rec-secondary" onClick={close}>Cancelar</button><button type="submit" className="rec-primary">Guardar receta</button></div>
           </form>
         </div>
       </div>}
