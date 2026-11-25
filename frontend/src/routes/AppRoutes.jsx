@@ -13,6 +13,7 @@ import ProveedoresPage from '../pages/ProveedoresPage.jsx';
 import CuentasPorPagarPage from '../pages/CuentasPorPagarPage.jsx';
 
 import CajaPage from '../pages/CajaPage.jsx';
+import RrhhPage from '../pages/RrhhPage.jsx';
 
 export default function AppRoutes() {
   return (
@@ -34,7 +35,7 @@ export default function AppRoutes() {
 
         <Route path="/pedidos" element={<PlaceholderPage title="Pedidos" />} />
         <Route path="/caja" element={<CajaPage />} />
-        <Route path="/rrhh" element={<PlaceholderPage title="RRHH" />} />
+        <Route path="/rrhh" element={<RrhhPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/pos" replace />} />
