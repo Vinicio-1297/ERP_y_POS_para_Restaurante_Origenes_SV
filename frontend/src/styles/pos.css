@@ -469,3 +469,15 @@
     display: none;
   }
 }
+
+.app-content:has(
+  > .inv-page,
+  > .rec-page,
+  > .cmp-page,
+  > .prv-page,
+  > .cpp-page
+) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
