@@ -11,3 +11,13 @@
 .cpp-page, .cpp-panel { min-width: 0; }
 .cpp-table-scroll { width: 100%; max-width: 100%; overflow-x: auto; }
 .cpp-table-scroll td:last-child { white-space: nowrap; }
+
+.cpp-helper { color: #744f3b; font-size: 13px; padding: 10px 0; line-height: 1.5; }
+.cpp-preview { margin-top: 16px; }
+.cpp-preview h2 { margin-bottom: 10px; }
+.cpp-preview li { padding: 5px 0; }
+.cpp-row-actions { white-space: nowrap; }
+.cpp-row-actions button { margin-right: 10px; }
+.cpp-history { padding: 13px 18px; border-radius: 12px; background: #fff6e4; }
+.cpp-history ul { margin: 8px 0 0; padding-left: 22px; }
+.cpp-history li { padding: 4px 0; }

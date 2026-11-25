@@ -1,23 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import useFrontBModal from '../hooks/useFrontBModal.js';
+import { inventarioService, recetasService, comprasService } from '../services/frontbRepos.js';
+import { dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, suggestedPurchase } from '../utils/frontbUtils.js';
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/inventario-feature.css';
 
 // Datos de demostración locales hasta que exista el endpoint de inventario.
 // No se precargan productos ficticios.
-const STORAGE_KEY = 'origenes_inventario_feature_v1';
 const EMPTY_FORM = {
   nombre: '', tipo: 'insumo', categoria: '', unidad: 'g',
   stock: '0', minimo: '0', codigo: '', precioVenta: '',
 };
-
-function readInventory() {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
 
 function getStatus(product) {
   if (Number(product.stock) <= 0) return 'Agotado';
@@ -25,12 +19,9 @@ function getStatus(product) {
   return 'Normal';
 }
 
-const money = (number) => new Intl.NumberFormat('es-SV', {
-  style: 'currency', currency: 'USD',
-}).format(number);
-
 export default function InventarioPage() {
-  const [products, setProducts] = useState(readInventory);
+  const navigate = useNavigate();
+  const [products, setProducts] = useState(inventarioService.list);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('todos');
   const [status, setStatus] = useState('Todos');
@@ -39,9 +30,9 @@ export default function InventarioPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-  }, [products]);
+  useEffect(() => { inventarioService.save(products); }, [products]);
+  const closeForm = () => { setShowForm(false); setError(''); };
+  const dialogRef = useFrontBModal(showForm, closeForm);
 
   const filtered = useMemo(() => products.filter((product) => {
     const query = `${product.nombre} ${product.categoria} ${product.codigo || ''}`.toLowerCase();
@@ -49,6 +40,9 @@ export default function InventarioPage() {
       (type === 'todos' || product.tipo === type) &&
       (status === 'Todos' || getStatus(product) === status);
   }), [products, search, type, status]);
+
+  const alertas = useMemo(() => products.filter(p => getStatus(p) !== 'Normal')
+    .sort((a, b) => (Number(a.stock) - Number(a.minimo)) - (Number(b.stock) - Number(b.minimo))), [products]);
 
   const stats = {
     total: products.length,
@@ -60,16 +54,11 @@ export default function InventarioPage() {
     setForm(product ? {
       ...EMPTY_FORM, ...product,
       stock: String(product.stock), minimo: String(product.minimo),
-      precioVenta: product.precioVenta == null ? '' : String(product.precioVenta),
+      precioVenta: product.tipo === 'reventa' ? String(centsFor(product, 'precioVentaCents', 'precioVenta') / 100) : '',
     } : EMPTY_FORM);
     setEditingId(product?.id || null);
     setError('');
     setShowForm(true);
-  }
-
-  function closeForm() {
-    setShowForm(false);
-    setError('');
   }
 
   function save(event) {
@@ -79,7 +68,7 @@ export default function InventarioPage() {
     const codigo = form.codigo.trim();
     const stock = Number(form.stock);
     const minimo = Number(form.minimo);
-    const precioVenta = Number(form.precioVenta);
+    const precioVentaCents = form.tipo === 'reventa' ? dollarsToCents(form.precioVenta) : null;
     if (!nombre || !categoria) {
       setError('Completá el nombre y la categoría.');
       return;
@@ -87,6 +76,15 @@ export default function InventarioPage() {
     if (form.stock === '' || form.minimo === '' || !Number.isFinite(stock) || !Number.isFinite(minimo) || stock < 0 || minimo < 0) {
       setError('El stock y el mínimo deben ser números válidos no negativos.');
       return;
+    }
+    if (!validQuantity(form.stock, form.unidad, true) || !validQuantity(form.minimo, form.unidad, true)) {
+      setError('Para artículos por unidad, stock y mínimo deben ser números enteros no negativos.'); return;
+    }
+    if (editingId && recetasService.list().some(r => r.ingredientes?.some(i => String(i.insumoId) === String(editingId)))) {
+      const current = products.find(p => p.id === editingId);
+      if (current && (current.tipo !== form.tipo || current.unidad !== form.unidad)) {
+        setError('No se puede cambiar el tipo o la unidad de un artículo que se usa en recetas.'); return;
+      }
     }
     if (!['insumo', 'reventa'].includes(form.tipo) || !['g', 'kg', 'ml', 'l', 'unidad'].includes(form.unidad)) {
       setError('Seleccioná un tipo y una unidad válidos.'); return;
@@ -96,8 +94,12 @@ export default function InventarioPage() {
       return;
     }
     if (form.tipo === 'reventa') {
-      if (!codigo || form.precioVenta === '' || !Number.isFinite(precioVenta) || precioVenta < 0) {
-        setError('En reventa, indicá código y precio de venta válido.');
+      if (!codigo) {
+        setError('Ingresá el código del producto de reventa.');
+        return;
+      }
+      if (precioVentaCents === null || precioVentaCents <= 0) {
+        setError('Ingresá un precio mayor que $0, con máximo dos decimales (por ejemplo: 10.00).');
         return;
       }
       if (products.some((p) => p.tipo === 'reventa' && p.codigo?.toLowerCase() === codigo.toLowerCase() && p.id !== editingId)) {
@@ -106,7 +108,7 @@ export default function InventarioPage() {
       }
     }
     const saved = {
-      id: editingId || (globalThis.crypto?.randomUUID?.() || `inv-${Date.now()}`),
+      id: editingId || newFrontBId('inv'),
       tipo: form.tipo,
       nombre,
       categoria,
@@ -114,7 +116,7 @@ export default function InventarioPage() {
       stock,
       minimo,
       codigo: form.tipo === 'reventa' ? codigo : '',
-      precioVenta: form.tipo === 'reventa' ? precioVenta : null,
+      precioVentaCents,
     };
     setProducts((previous) => editingId
       ? previous.map((p) => p.id === editingId ? saved : p)
@@ -123,6 +125,14 @@ export default function InventarioPage() {
   }
 
   function deleteProduct(product) {
+    const usada = recetasService.list().filter(r => r.ingredientes?.some(i => String(i.insumoId) === String(product.id)));
+    if (usada.length) {
+      window.alert(`No se puede eliminar «${product.nombre}»: se utiliza en ${usada.length} receta(s).`); return;
+    }
+    const comprado = comprasService.list().some(c => c.lineas?.some(l => String(l.inventarioId) === String(product.id)));
+    if (comprado) {
+      window.alert(`No se puede eliminar «${product.nombre}»: figura en facturas de compra.`); return;
+    }
     if (!window.confirm(`¿Eliminar "${product.nombre}" del inventario?`)) return;
     setProducts((previous) => previous.filter((p) => p.id !== product.id));
   }
@@ -169,7 +179,7 @@ export default function InventarioPage() {
                   <td><strong>{p.nombre}</strong>{p.codigo && <small>Código: {p.codigo}</small>}</td>
                   <td>{p.tipo === 'reventa' ? 'Reventa' : 'Insumo'}</td>
                   <td>{p.categoria}</td><td>{p.unidad}</td><td>{p.stock}</td><td>{p.minimo}</td>
-                  <td>{p.tipo === 'reventa' ? money(p.precioVenta) : '—'}</td>
+                  <td>{p.tipo === 'reventa' ? formatMoney(centsFor(p, 'precioVentaCents', 'precioVenta')) : '—'}</td>
                   <td><span className={`inv-status inv-${getStatus(p).toLowerCase().replace(' ', '-')}`}>{getStatus(p)}</span></td>
                   <td><div className="inv-actions"><button type="button" onClick={() => openForm(p)}>Editar</button><button type="button" onClick={() => deleteProduct(p)}>Eliminar</button></div></td>
                 </tr>
@@ -179,8 +189,30 @@ export default function InventarioPage() {
         </div>
       </div>
 
+      <section className="inv-panel inv-alert-panel" id="alertas-stock" aria-labelledby="inv-alert-heading">
+        <div className="frontb-panel-actions">
+          <h2 id="inv-alert-heading">Panel de alertas de stock mínimo</h2>
+          <strong className="inv-alert-count" aria-label={`${alertas.length} artículos críticos`}>{alertas.length} alerta(s)</strong>
+        </div>
+        <div className="inv-table-wrap">
+          <table className="inv-table">
+            <thead><tr><th>Artículo</th><th>Estado</th><th>Existencia</th><th>Mínimo</th><th>Cantidad sugerida</th><th>Acción</th></tr></thead>
+            <tbody>{alertas.length ? alertas.map(item => (
+              <tr key={item.id}>
+                <td><strong>{item.nombre}</strong></td>
+                <td><span className={`inv-status inv-${getStatus(item).toLowerCase().replace(' ', '-')}`}>{getStatus(item)}</span></td>
+                <td>{item.stock} {item.unidad}</td>
+                <td>{item.minimo} {item.unidad}</td>
+                <td><strong>{suggestedPurchase(item)} {item.unidad}</strong></td>
+                <td><button type="button" className="inv-primary" onClick={() => navigate(`/compras?inventarioId=${encodeURIComponent(item.id)}`)}>Registrar compra</button></td>
+              </tr>
+            )) : <tr><td className="inv-empty" colSpan={6}>No hay artículos con stock bajo o agotados.</td></tr>}</tbody>
+          </table>
+        </div>
+      </section>
+
       {showForm && <div className="inv-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeForm(); }}>
-        <div className="inv-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-dialog-title">
+        <div className="inv-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="inv-dialog-title">
           <div className="inv-dialog-head"><h2 id="inv-dialog-title">{editingId ? 'Editar artículo' : 'Nuevo artículo'}</h2><button type="button" aria-label="Cerrar" onClick={closeForm}>×</button></div>
           <form onSubmit={save}>
             <label>Tipo de artículo
@@ -194,8 +226,8 @@ export default function InventarioPage() {
               <label>Unidad<select value={form.unidad} onChange={(event) => setForm({...form, unidad: event.target.value})}><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="l">l</option><option value="unidad">unidad</option></select></label>
             </div>
             <div className="inv-field-grid">
-              <label>Existencia<input type="number" min="0" step="any" value={form.stock} onChange={(event) => setForm({...form, stock: event.target.value})} /></label>
-              <label>Stock mínimo<input type="number" min="0" step="any" value={form.minimo} onChange={(event) => setForm({...form, minimo: event.target.value})} /></label>
+              <label>Existencia<input type="number" min="0" step={form.unidad === 'unidad' ? '1' : 'any'} value={form.stock} onChange={(event) => setForm({...form, stock: event.target.value})} /></label>
+              <label>Stock mínimo<input type="number" min="0" step={form.unidad === 'unidad' ? '1' : 'any'} value={form.minimo} onChange={(event) => setForm({...form, minimo: event.target.value})} /></label>
             </div>
             {form.tipo === 'reventa' && <div className="inv-field-grid">
               <label>Código<input required value={form.codigo} onChange={(event) => setForm({...form, codigo: event.target.value})} /></label>

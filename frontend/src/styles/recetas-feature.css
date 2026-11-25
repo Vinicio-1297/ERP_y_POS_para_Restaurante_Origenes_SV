@@ -62,3 +62,5 @@
 .rec-panel-head input { max-width: 100%; min-width: min(240px, 100%); }
 .rec-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .rec-table-wrap td:last-child { white-space: nowrap; }
+
+.rec-notice { padding: 13px 17px; border-radius: 12px; background: #fff2d5; border: 1px solid #dec49e; color: #74442e; line-height: 1.5; margin: 0 0 18px; }
