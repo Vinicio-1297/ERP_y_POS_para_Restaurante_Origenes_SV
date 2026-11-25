@@ -162,7 +162,7 @@ export default function AppRoutes() {
           <Route
             path="/caja"
             element={
-              <RequireRole roles={['administrador', 'gerente']}>
+              <RequireRole roles={['administrador', 'gerente', 'cajero']}>
                 <CajaPage />
               </RequireRole>
             }
