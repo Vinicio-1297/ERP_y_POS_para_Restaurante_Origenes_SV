@@ -12,6 +12,7 @@ const sucursalRoutes = require('./routes/sucursalRoutes');
 const empleadoRoutes = require('./routes/empleadoRoutes');
 const cajaRoutes = require('./routes/cajaRoutes');
 const reporteRoutes = require('./routes/reporteRoutes');
+const planillaRoutes = require('./routes/planillaRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api', posRoutes);
 app.use('/api', empleadoRoutes);
 app.use('/api', cajaRoutes);
 app.use('/api', reporteRoutes);
+app.use('/api', planillaRoutes);
 app.use(errorHandler);
 
 module.exports = app;
