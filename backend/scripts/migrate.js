@@ -83,9 +83,18 @@ async function main() {
         console.log('Migracion aplicada:', archivo);
 
       } catch (error) {
+    console.error('Error SQL original:', error.message);
+    console.error('Código SQL:', error.number);
+    console.error('Línea:', error.lineNumber);
+
+    try {
         await transaccion.rollback();
-        throw error;
-      }
+    } catch (rollbackError) {
+        console.error('Error al realizar rollback:', rollbackError.message);
+    }
+
+    throw error;
+}
     }
 
     console.log('Migraciones completadas.');
