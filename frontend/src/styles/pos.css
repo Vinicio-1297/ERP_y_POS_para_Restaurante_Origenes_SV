@@ -481,3 +481,17 @@
   overflow-x: hidden;
   overscroll-behavior-y: contain;
 }
+
+
+.app-nav-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+  user-select: none;
+}
+.app-nav-link.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}

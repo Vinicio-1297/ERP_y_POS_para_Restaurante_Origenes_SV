@@ -11,6 +11,18 @@ const EMPTY_FORM = {
   stock: '0', minimo: '0', codigo: '', precioVenta: '',
 };
 
+function readUser() {
+  try {
+    return JSON.parse(sessionStorage.getItem('origenes.usuario'));
+  } catch {
+    return null;
+  }
+}
+
+function getRole(user) {
+  return String(user?.rol || user?.role || '').toLowerCase().trim();
+}
+
 function getStatus(product) {
   if (Number(product.stock) <= 0) return 'Agotado';
   if (Number(product.stock) <= Number(product.minimo)) return 'Stock bajo';
@@ -19,6 +31,14 @@ function getStatus(product) {
 
 export default function InventarioPage() {
   const navigate = useNavigate();
+  const [usuario] = useState(readUser);
+  const rol = getRole(usuario);
+  const esAdministrador = rol === 'administrador';
+  const esGerente = rol === 'gerente';
+  const puedeVer = esAdministrador || esGerente;
+  const puedeAgregar = esAdministrador || esGerente;
+  const puedeEditar = esAdministrador;
+  const puedeEliminar = esAdministrador;
   const [products, setProducts] = useState(inventarioService.list);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('todos');
@@ -28,8 +48,26 @@ export default function InventarioPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => { inventarioService.save(products); }, [products]);
-  const closeForm = () => { setShowForm(false); setError(''); };
+  useEffect(() => {
+    if (!usuario) {
+      navigate('/login', { replace: true });
+      return;
+    }
+    if (!puedeVer) {
+      navigate('/pos', { replace: true });
+    }
+  }, [usuario, puedeVer, navigate]);
+
+  useEffect(() => {
+    if (puedeVer) inventarioService.save(products);
+  }, [products, puedeVer]);
+
+  const closeForm = () => {
+    setShowForm(false);
+    setError('');
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  };
   const dialogRef = useFrontBModal(showForm, closeForm);
 
   const filtered = useMemo(() => products.filter((product) => {
@@ -49,6 +87,7 @@ export default function InventarioPage() {
   };
 
   function openForm(product = null) {
+    if (!puedeAgregar || (product && !puedeEditar)) return;
     setForm(product ? {
       ...EMPTY_FORM, ...product,
       stock: String(product.stock), minimo: String(product.minimo),
@@ -61,6 +100,11 @@ export default function InventarioPage() {
 
   function save(event) {
     event.preventDefault();
+    if (!puedeAgregar) return;
+    if (editingId && !puedeEditar) {
+      setError('Solo el administrador puede editar artículos.');
+      return;
+    }
     const nombre = form.nombre.trim();
     const categoria = form.categoria.trim();
     const codigo = form.codigo.trim();
@@ -123,6 +167,7 @@ export default function InventarioPage() {
   }
 
   function deleteProduct(product) {
+    if (!puedeEliminar) return;
     const usada = recetasService.list().filter(r => r.ingredientes?.some(i => String(i.insumoId) === String(product.id)));
     if (usada.length) {
       window.alert(`No se puede eliminar «${product.nombre}»: se utiliza en ${usada.length} receta(s).`); return;
@@ -134,6 +179,8 @@ export default function InventarioPage() {
     if (!window.confirm(`¿Eliminar "${product.nombre}" del inventario?`)) return;
     setProducts((previous) => previous.filter((p) => p.id !== product.id));
   }
+
+  if (!puedeVer) return null;
 
   return (
     <section className="inv-page">
@@ -152,7 +199,10 @@ export default function InventarioPage() {
       </div>
 
       <div className="inv-panel">
-        <div className="frontb-panel-actions"><h2>Artículos del inventario</h2><button type="button" className="inv-primary" onClick={() => openForm()}>+ Nuevo artículo</button></div>
+        <div className="frontb-panel-actions">
+          <h2>Artículos del inventario</h2>
+          {puedeAgregar && <button type="button" className="inv-primary" onClick={() => openForm()}>+ Nuevo artículo</button>}
+        </div>
         <div className="inv-filters">
           <input aria-label="Buscar artículos" placeholder="Buscar nombre, categoría o código..." value={search} onChange={(event) => setSearch(event.target.value)} />
           <label>Tipo
@@ -170,7 +220,7 @@ export default function InventarioPage() {
         </div>
         <div className="inv-table-wrap">
           <table className="inv-table">
-            <thead><tr><th>Artículo</th><th>Tipo</th><th>Categoría</th><th>Unidad</th><th>Stock</th><th>Mínimo</th><th>Precio venta</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Artículo</th><th>Tipo</th><th>Categoría</th><th>Unidad</th><th>Stock</th><th>Mínimo</th><th>Precio venta</th><th>Estado</th>{esAdministrador && <th>Acciones</th>}</tr></thead>
             <tbody>
               {filtered.length ? filtered.map((p) => (
                 <tr key={p.id}>
@@ -179,9 +229,11 @@ export default function InventarioPage() {
                   <td>{p.categoria}</td><td>{p.unidad}</td><td>{p.stock}</td><td>{p.minimo}</td>
                   <td>{p.tipo === 'reventa' ? formatMoney(centsFor(p, 'precioVentaCents', 'precioVenta')) : '—'}</td>
                   <td><span className={`inv-status inv-${getStatus(p).toLowerCase().replace(' ', '-')}`}>{getStatus(p)}</span></td>
-                  <td><div className="inv-actions"><button type="button" onClick={() => openForm(p)}>Editar</button><button type="button" onClick={() => deleteProduct(p)}>Eliminar</button></div></td>
+                  {esAdministrador && (
+                    <td><div className="inv-actions"><button type="button" onClick={() => openForm(p)}>Editar</button><button type="button" onClick={() => deleteProduct(p)}>Eliminar</button></div></td>
+                  )}
                 </tr>
-              )) : <tr><td className="inv-empty" colSpan="9">No hay artículos para mostrar. Podés crear uno con «Nuevo artículo».</td></tr>}
+              )) : <tr><td className="inv-empty" colSpan={esAdministrador ? 9 : 8}>No hay artículos para mostrar.</td></tr>}
             </tbody>
           </table>
         </div>
