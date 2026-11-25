@@ -7,8 +7,6 @@ import '../styles/proveedores-feature.css';
 
 const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '', diasCredito: '0', estado: 'Activo' });
 
-// Permite editar los números que antes se guardaron con +503 sin cambiar
-// otros registros hasta que el usuario vuelva a guardarlos.
 function telefonoNacional(valor) {
   const actual = String(valor || '').trim();
   const sinPrefijo = actual.replace(/^\+503[\s-]*/, '');
@@ -22,8 +20,6 @@ function validar(form, proveedores, editando) {
   if (!form.nombre.trim()) return 'Ingresá el nombre del proveedor.';
   if (!form.contacto.trim()) return 'Ingresá una persona de contacto.';
   if (!form.telefono.trim()) return 'Ingresá un teléfono.';
-  // La validación del teléfono nacional (8 dígitos, con guion opcional)
-  // se hace en el propio input con pattern; no muestra un aviso rojo extra.
   if (form.correo.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo.trim())) return 'Ingresá un correo válido.';
   const dias = Number(form.diasCredito);
   if (String(form.diasCredito).trim() === '' || !Number.isInteger(dias) || dias < 0 || dias > 365) return 'Los días de crédito deben estar entre 0 y 365.';
@@ -62,7 +58,6 @@ export default function ProveedoresPage() {
   }
   function guardar(e) {
     e.preventDefault();
-    // Refuerzo para envíos no nativos; el navegador aplica pattern antes de onSubmit.
     if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) return;
     const mensaje = validar(form, proveedores, editando);
     if (mensaje) { setError(mensaje); return; }

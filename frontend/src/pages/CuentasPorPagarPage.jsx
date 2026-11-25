@@ -47,7 +47,6 @@ export default function CuentasPorPagarPage() {
     const saldoCents = Math.max(0, f.totalCents - f.pagos.reduce((sum, payment) => sum + payment.montoCents, 0));
     return { ...f, saldoCents, estado: invoiceStatus(f, saldoCents) };
   }), [facturas]);
-  // Solo vista de apoyo. No crea ni contabiliza la cuenta: Back C lo hará al recibir la compra.
   const creditosEnCompras = compras.filter(c => c.estado === 'Recibida' && c.condicionPago === 'Crédito'
     && !facturas.some(f => String(f.compraId) === String(c.id)));
 

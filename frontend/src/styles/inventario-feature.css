@@ -239,7 +239,6 @@
   }
 }
 
-/* Estilos específicos de las tablas y el panel de alertas de Front B. */
 .frontb-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .frontb-panel-actions h2 { margin: 0; }
 .inv-page, .inv-panel { min-width: 0; }

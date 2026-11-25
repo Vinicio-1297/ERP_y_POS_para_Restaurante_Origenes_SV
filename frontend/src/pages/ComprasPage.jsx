@@ -6,7 +6,6 @@ import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, valid
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/compras-feature.css';
 
-// Adaptador para compras antiguas guardadas con dólares y proveedor por nombre.
 function normalizeCompra(c) {
   const lineas = (c.lineas || []).map(l => ({
     ...l, costoCents: centsFor(l, 'costoCents', 'costo'),
@@ -118,8 +117,6 @@ export default function ComprasPage() {
   }
   function marcarRecibida(compra) {
     if (!window.confirm(`¿Marcar como recibida la factura ${compra.numero}?`)) return;
-    // Solo registra el estado en esta maqueta. La actualización de stock es responsabilidad
-    // del endpoint transaccional del backend; nunca alterar inventario aquí por separado.
     setCompras(old => old.map(c => c.id === compra.id && c.estado === 'Borrador'
       ? { ...c, estado: 'Recibida' } : c));
   }

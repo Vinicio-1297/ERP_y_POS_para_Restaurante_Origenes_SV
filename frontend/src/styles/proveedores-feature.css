@@ -9,7 +9,6 @@
 .prv-overlay{position:fixed;inset:0;z-index:1000;background:rgba(43,28,20,.52);display:flex;align-items:center;justify-content:center;padding:20px}.prv-dialog{max-width:750px;width:100%;max-height:92vh;overflow-y:auto;background:#fff2d5;border-radius:16px;padding:24px}.prv-dialog-head{display:flex;justify-content:space-between;align-items:center}.prv-dialog-head h2{margin:0 0 18px;color:#a45038}.prv-close{border:0;background:transparent;font-size:28px;color:#a45038;cursor:pointer}.prv-form{display:grid;gap:16px}.prv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.prv-wide{grid-column:1/-1}.prv-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}.prv-form input,.prv-form select{width:100%;border:1px solid #dec49e;background:#fffaf0;padding:10px;border-radius:9px;color:#573a2e}.prv-error{color:#a33232;font-weight:650;margin:0}.prv-form-actions{display:flex;justify-content:flex-end;gap:10px}.prv-secondary{background:#f3dbb6;color:#844430;border:1px solid #d8b484;border-radius:9px;padding:11px 15px;cursor:pointer}
 @media(max-width:850px){.prv-page{padding:18px}.prv-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.prv-header{align-items:stretch;flex-direction:column}.prv-grid{grid-template-columns:1fr}.prv-wide{grid-column:auto}}@media(max-width:450px){.prv-stats{grid-template-columns:1fr}.prv-filters input{min-width:0;width:100%}}
 
-/* Front B: controles accesibles también junto a la tabla */
 .frontb-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .frontb-panel-actions h2 { margin: 0; }
 
@@ -17,7 +16,6 @@
 .prv-table-wrap { max-width: 100%; -webkit-overflow-scrolling: touch; }
 .prv-table-wrap table { min-width: 760px; }
 
-/* Front B: mantener las acciones en una misma fila. */
 .prv-page, .prv-panel { min-width: 0; }
 .prv-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .prv-actions { display: flex; width: max-content; gap: 8px; flex-wrap: nowrap; }

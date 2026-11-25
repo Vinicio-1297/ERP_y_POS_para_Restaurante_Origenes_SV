@@ -1,5 +1,3 @@
-// Adaptadores TEMPORALES de Front B. Cuando Back C entregue los endpoints,
-// se reemplazan estas operaciones por fetch sin cambiar los componentes de formulario.
 import { STORE_KEYS, loadRows, saveRows } from '../utils/frontbUtils.js';
 
 export const inventarioService = {

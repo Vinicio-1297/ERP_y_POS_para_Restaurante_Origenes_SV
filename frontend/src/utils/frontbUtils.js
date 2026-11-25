@@ -1,4 +1,3 @@
-// Utilidades exclusivas de Front B. No modifican las utilidades compartidas con POS.
 export const STORE_KEYS = Object.freeze({
   inventario: 'origenes_inventario_feature_v1',
   recetas: 'origenes_recetas_feature_v1',
@@ -17,7 +16,6 @@ export function loadRows(key) {
 }
 
 export function saveRows(key, rows) {
-  // El almacenamiento local es temporal; Back C implementará la persistencia real.
   try {
     window.localStorage.setItem(key, JSON.stringify(rows));
     window.dispatchEvent(new CustomEvent('frontb:changed', { detail: { key } }));
@@ -47,8 +45,6 @@ export function localDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Convierte dólares escritos como texto a centavos ENTEROS, sin multiplicaciones de float.
-// null indica entrada inválida; 0 es válido si el campo lo permite.
 export function dollarsToCents(input) {
   const value = String(input ?? '').trim().replace(',', '.');
   if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
@@ -57,7 +53,6 @@ export function dollarsToCents(input) {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
-// Compatibilidad con los registros anteriores que usaban dólares decimales.
 export function oldDollarsToCents(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount < 0) return 0;
@@ -84,7 +79,6 @@ export function validQuantity(qty, unit, allowZero = false) {
 export function suggestedPurchase(item) {
   const min = Number(item.minimo) || 0;
   const stock = Number(item.stock) || 0;
-  // Meta orientativa: volver a 2 x el mínimo, o 1 unidad si mínimo es cero.
   const target = min > 0 ? min * 2 : 1;
   const missing = Math.max(0, target - stock);
   const rounded = item.unidad === 'unidad' ? Math.ceil(missing) : Math.ceil(missing * 1000) / 1000;

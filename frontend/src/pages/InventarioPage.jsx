@@ -6,8 +6,6 @@ import { dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, sugg
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/inventario-feature.css';
 
-// Datos de demostración locales hasta que exista el endpoint de inventario.
-// No se precargan productos ficticios.
 const EMPTY_FORM = {
   nombre: '', tipo: 'insumo', categoria: '', unidad: 'g',
   stock: '0', minimo: '0', codigo: '', precioVenta: '',

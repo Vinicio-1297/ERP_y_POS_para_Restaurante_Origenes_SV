@@ -6,7 +6,6 @@ import { products as posProducts } from '../data/mockMenu.js';
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/recetas-feature.css';
 
-// Claves de la fase de integración. Reemplazar por servicios REST cuando el backend esté listo.
 function freshForm() {
   return { productoId: '', rendimiento: '1', ingredientes: [] };
 }

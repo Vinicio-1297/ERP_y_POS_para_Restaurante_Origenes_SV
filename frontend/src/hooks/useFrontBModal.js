@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-// Escape, foco inicial, tabulador dentro del modal y restauración del foco.
 export default function useFrontBModal(open, close) {
   const dialogRef = useRef(null);
   const closeRef = useRef(close);
