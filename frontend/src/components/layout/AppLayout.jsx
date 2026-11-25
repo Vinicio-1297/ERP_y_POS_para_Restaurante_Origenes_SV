@@ -1,7 +1,14 @@
+
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import formatToday from '../../utils/formatToday.js';
-import { UncontrolledDropdown, DropdownToggle, DropdownMenu, DropdownItem } from 'reactstrap';
+import {
+  UncontrolledDropdown,
+  DropdownToggle,
+  DropdownMenu,
+  DropdownItem
+} from 'reactstrap';
+
 import '../../styles/pos.css';
 
 const NAV_ITEMS = [
@@ -17,7 +24,6 @@ export default function AppLayout() {
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
 
-  // Obtiene los datos del usuario que inicio sesion.
   const [usuario] = useState(() => {
     try {
       return JSON.parse(sessionStorage.getItem('origenes.usuario'));
@@ -26,7 +32,9 @@ export default function AppLayout() {
     }
   });
 
-  // Elimina los datos de la sesion y regresa al login.
+  const rol = usuario?.rol?.toLowerCase();
+  const esCajero = rol === 'cajero';
+
   function cerrarSesion() {
     sessionStorage.removeItem('origenes.token');
     sessionStorage.removeItem('origenes.usuario');
@@ -35,8 +43,12 @@ export default function AppLayout() {
 
   return (
     <div className="app-shell">
+
       <header className="app-topbar">
-        <div className="app-logo" aria-label="Orígenes SV">POS</div>
+        <div className="app-logo" aria-label="Orígenes SV">
+          POS
+        </div>
+
         <label className="app-search">
           <span aria-hidden="true">🔍</span>
           <input
@@ -46,15 +58,32 @@ export default function AppLayout() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-        <time className="app-date">{formatToday()}</time>
+
+        <time className="app-date">
+          {formatToday()}
+        </time>
+
         <div className="app-user">
-          <button type="button" className="app-bell" aria-label="Notificaciones">🔔</button>
+          <button
+            type="button"
+            className="app-bell"
+            aria-label="Notificaciones"
+          >
+            🔔
+          </button>
+
           <span aria-hidden="true">👤</span>
-          {/* Muestra el nombre del usuario autenticado. */}
+
           <UncontrolledDropdown>
-            <DropdownToggle caret tag="button" type="button" className="app-user-name">
-              Usuario: {usuario?.nombre || 'Sin sesión'}
+            <DropdownToggle
+              caret
+              tag="button"
+              type="button"
+              className="app-user-name"
+            >
+              Usuario: {usuario?.nombre || usuario?.rol || 'Sin sesión'}
             </DropdownToggle>
+
             <DropdownMenu end>
               <DropdownItem onClick={cerrarSesion}>
                 Cerrar sesión
@@ -65,17 +94,45 @@ export default function AppLayout() {
       </header>
 
       <nav className="app-sidebar" aria-label="Módulos">
-        {NAV_ITEMS.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => `app-nav-link${isActive ? ' is-active' : ''}`}>
-            <span aria-hidden="true">{item.icon}</span>
-            <small>{item.label}</small>
-          </NavLink>
-        ))}
+
+        {NAV_ITEMS.map((item) => {
+
+          const deshabilitado = esCajero && item.to !== '/pos';
+
+          if (deshabilitado) {
+            return (
+              <div
+                key={item.to}
+                className="app-nav-link app-nav-disabled"
+                aria-disabled="true"
+                title="Módulo no disponible para cajeros"
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                <small>{item.label}</small>
+              </div>
+            );
+          }
+
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `app-nav-link${isActive ? ' is-active' : ''}`
+              }
+            >
+              <span aria-hidden="true">{item.icon}</span>
+              <small>{item.label}</small>
+            </NavLink>
+          );
+        })}
+
       </nav>
 
       <main className="app-content">
         <Outlet context={{ search }} />
       </main>
+
     </div>
   );
 }

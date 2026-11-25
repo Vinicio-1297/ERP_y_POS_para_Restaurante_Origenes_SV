@@ -1,7 +1,14 @@
 
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import {
+  Navigate,
+  Route,
+  Routes,
+  Outlet,
+  useLocation
+} from 'react-router-dom';
 
 import AppLayout from '../components/layout/AppLayout.jsx';
+
 import HealthPage from '../pages/HealthPage.jsx';
 import LoginPage from '../pages/LoginPage.jsx';
 import PlaceholderPage from '../pages/PlaceHolder.jsx';
@@ -13,70 +20,166 @@ import ComprasPage from '../pages/ComprasPage.jsx';
 import ProveedoresPage from '../pages/ProveedoresPage.jsx';
 import CuentasPorPagarPage from '../pages/CuentasPorPagarPage.jsx';
 
-// Verifica que exista una sesión antes de entrar al sistema.
-function ProtectedRoute() {
-  const token = sessionStorage.getItem('origenes.token');
+// Verificar que exista una sesión iniciada.
+function RequireAuth() {
+  const location = useLocation();
 
-  if (!token) {
-    return <Navigate to="/login" replace />;
+  const token = sessionStorage.getItem('origenes.token');
+  const usuario = JSON.parse(
+    sessionStorage.getItem('origenes.usuario') || 'null'
+  );
+
+  if (!token || !usuario) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   return <Outlet />;
+}
+
+// Validar los permisos según el rol.
+function RequireRole({ roles, children }) {
+  const usuario = JSON.parse(
+    sessionStorage.getItem('origenes.usuario') || 'null'
+  );
+
+  const rol = usuario?.rol?.toLowerCase();
+
+  if (!roles.includes(rol)) {
+    return <Navigate to="/pos" replace />;
+  }
+
+  return children;
+}
+
+// Evitar que un usuario autenticado vuelva al login.
+function LoginRoute() {
+  const token = sessionStorage.getItem('origenes.token');
+
+  if (token) {
+    return <Navigate to="/pos" replace />;
+  }
+
+  return <LoginPage />;
 }
 
 export default function AppRoutes() {
   return (
     <Routes>
 
-      {/* Página inicial */}
-      <Route
-        path="/"
-        element={<Navigate to="/login" replace />}
-      />
+      {/* Login */}
+      <Route path="/login" element={<LoginRoute />} />
 
-      {/* Páginas públicas */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/health" element={<HealthPage />} />
+      {/* Rutas que requieren autenticación */}
+      <Route element={<RequireAuth />}>
 
-      {/* Páginas protegidas */}
-      <Route element={<ProtectedRoute />}>
+        {/* Salud del sistema */}
+        <Route
+          path="/health"
+          element={
+            <RequireRole roles={['administrador', 'gerente']}>
+              <HealthPage />
+            </RequireRole>
+          }
+        />
+
+        {/* Módulos principales */}
         <Route element={<AppLayout />}>
 
-          <Route path="/pos" element={<PosPage />} />
+          {/* POS: administrador, gerente y cajero */}
+          <Route
+            path="/pos"
+            element={
+              <RequireRole roles={['administrador', 'gerente', 'cajero']}>
+                <PosPage />
+              </RequireRole>
+            }
+          />
 
-          <Route path="/inventario" element={<InventarioPage />} />
-          <Route path="/recetas" element={<RecetasPage />} />
-          <Route path="/compras" element={<ComprasPage />} />
-          <Route path="/proveedores" element={<ProveedoresPage />} />
+          {/* Inventario */}
+          <Route
+            path="/inventario"
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <InventarioPage />
+              </RequireRole>
+            }
+          />
 
+          {/* Recetas */}
+          <Route
+            path="/recetas"
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <RecetasPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Compras */}
+          <Route
+            path="/compras"
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <ComprasPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Proveedores */}
+          <Route
+            path="/proveedores"
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <ProveedoresPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Cuentas por pagar */}
           <Route
             path="/cuentas-por-pagar"
-            element={<CuentasPorPagarPage />}
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <CuentasPorPagarPage />
+              </RequireRole>
+            }
           />
 
+          {/* Pedidos */}
           <Route
             path="/pedidos"
-            element={<PlaceholderPage title="Pedidos" />}
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <PlaceholderPage title="Pedidos" />
+              </RequireRole>
+            }
           />
 
+          {/* Caja */}
           <Route
             path="/caja"
-            element={<PlaceholderPage title="Caja" />}
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <PlaceholderPage title="Caja" />
+              </RequireRole>
+            }
           />
 
+          {/* Recursos Humanos */}
           <Route
             path="/rrhh"
-            element={<PlaceholderPage title="RRHH" />}
+            element={
+              <RequireRole roles={['administrador', 'gerente']}>
+                <PlaceholderPage title="RRHH" />
+              </RequireRole>
+            }
           />
 
         </Route>
       </Route>
 
-      {/* Rutas inexistentes */}
-      <Route
-        path="*"
-        element={<Navigate to="/login" replace />}
-      />
+      {/* Cualquier ruta desconocida */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
 
     </Routes>
   );
