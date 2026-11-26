@@ -15,7 +15,8 @@
     "db:rrhh": "node scripts/runSql.js ../database/rrhh ../database/rrhh/seed",
     "db:soporte": "node scripts/runSql.js ../database/soporte ../database/soporte/seed",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/runSql.js ../database/soporte/seed"
+    "db:seed": "node scripts/runSql.js ../database/soporte/seed",
+    "db:inventario": "node scripts/runSql.js ../database/inventario ../database/inventario/seed"
   },
   "dependencies": {
     "bcryptjs": "3.0.3",
