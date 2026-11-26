@@ -1,0 +1,12 @@
+FROM node:22-bookworm-slim
+
+WORKDIR /app/backend
+
+COPY backend/package*.json ./
+
+RUN npm ci
+
+COPY backend/ ./
+COPY database/ /app/database/
+
+CMD ["npm", "run", "db:setup"]

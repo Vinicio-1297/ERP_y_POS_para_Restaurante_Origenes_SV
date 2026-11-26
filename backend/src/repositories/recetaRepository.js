@@ -2,7 +2,7 @@ const sql = require('mssql');
 const { crearRequest } = require('./request');
 
 // Obtener los ingredientes de las recetas de varios productos.
-// Solo devuelve recetas activas con insumos activos.
+// Solo devuelve recetas activas con todos sus insumos activos.
 async function obtenerPorProductos(productoIds, transaccion) {
   if (!productoIds.length) {
     return [];
@@ -16,22 +16,33 @@ async function obtenerPorProductos(productoIds, transaccion) {
   });
 
   const resultado = await request.query(`
-    SELECT
-      r.producto_id AS productoId,
+    select
+      r.producto_id as productoId,
       r.rendimiento,
-      rd.insumo_id AS insumoId,
+      rd.insumo_id as insumoId,
       rd.cantidad,
       rd.unidad
-    FROM dbo.recetas r
-    INNER JOIN dbo.receta_detalles rd
-      ON rd.receta_id = r.id
-    INNER JOIN dbo.insumos i
-      ON i.id = rd.insumo_id
-    WHERE r.activo = 1
-      AND i.activo = 1
-      AND i.tipo = 'insumo'
-      AND r.producto_id IN (${marcadores.join(', ')})
-    ORDER BY r.producto_id, rd.insumo_id
+    from dbo.recetas r
+    inner join dbo.receta_detalles rd
+      on rd.receta_id = r.id
+    where r.activo = 1
+      and r.producto_id in (${marcadores.join(', ')})
+
+      -- descartar toda la receta si tiene un ingrediente invalido
+      and not exists (
+        select 1
+        from dbo.receta_detalles d
+        inner join dbo.insumos i
+          on i.id = d.insumo_id
+        where d.receta_id = r.id
+          and (
+            i.activo = 0
+            or i.tipo <> 'insumo'
+            or i.unidad <> d.unidad
+          )
+      )
+
+    order by r.producto_id, rd.insumo_id
   `);
 
   return resultado.recordset;
