@@ -1,37 +1,60 @@
-// Lógica de negocio del POS. Aquí NO hay SQL: las consultas viven en repositories/.
+
+// Logica de negocio del POS.
 const { ejecutarEnTransaccion } = require('../config/transaccion');
 const correlativoRepository = require('../repositories/correlativoRepository');
 const pedidoRepository = require('../repositories/pedidoRepository');
 const productoRepository = require('../repositories/productoRepository');
 const clienteRepository = require('../repositories/clienteRepository');
+const recetaRepository = require('../repositories/recetaRepository');
+const inventarioRepository = require('../repositories/inventarioRepository');
+const inventarioService = require('./inventarioService');
+
 const { httpError } = require('../utils/httpError');
-const { agruparItems, calcularTotales, formatearNumero } = require('../utils/totales');
+const {
+  agruparItems,
+  calcularTotales,
+  formatearNumero
+} = require('../utils/totales');
 const { rangoDeFechas } = require('../utils/fechas');
 
-// Hasta que Back B agregue sucursales al login, todo el POS trabaja con una sola.
 const SUCURSAL_DEFECTO = 'Restaurante';
 
-// Solo referencia visual para "Pedido #0001". El número definitivo lo asigna crearPedido.
+// Por ahora el POS trabaja con la sucursal Restaurante.
+const SUCURSAL_INVENTARIO_ID = 1;
+
+// Obtener el siguiente numero visual del pedido.
 async function obtenerProximoNumero(sucursal = SUCURSAL_DEFECTO) {
-  const ultimo = await correlativoRepository.obtenerUltimo('pedido', sucursal);
-  return { numero: formatearNumero((ultimo ?? 0) + 1) };
+  const ultimo = await correlativoRepository.obtenerUltimo(
+    'pedido',
+    sucursal
+  );
+
+  return {
+    numero: formatearNumero((ultimo ?? 0) + 1)
+  };
 }
 
 async function siguienteCorrelativo(tipo, sucursal, transaccion) {
-  const numero = await correlativoRepository.incrementar(tipo, sucursal, transaccion);
+  const numero = await correlativoRepository.incrementar(
+    tipo,
+    sucursal,
+    transaccion
+  );
 
   if (numero === null) {
-    throw new Error(`Correlativo "${tipo}" no configurado para la sucursal "${sucursal}". Ejecuta npm run db:pos`);
+    throw new Error(
+      `Correlativo "${tipo}" no configurado para la sucursal "${sucursal}". Ejecuta npm run db:pos`
+    );
   }
 
   return numero;
 }
 
-// Valida al cliente y obtiene los datos que se guardarán en el comprobante.
+// Validar al cliente y obtener sus datos para el comprobante.
 async function obtenerDatosCliente(datos) {
   if (datos.clienteId == null) {
     if (datos.tipoComprobante === 'credito-fiscal') {
-      throw httpError(400, 'El crédito fiscal requiere un cliente');
+      throw httpError(400, 'El credito fiscal requiere un cliente');
     }
 
     return {};
@@ -43,7 +66,6 @@ async function obtenerDatosCliente(datos) {
     throw httpError(404, 'Cliente no encontrado o inactivo');
   }
 
-  // Para emitir un crédito fiscal se requieren los datos fiscales completos.
   if (datos.tipoComprobante === 'credito-fiscal') {
     const campos = [
       cliente.nombre,
@@ -54,11 +76,13 @@ async function obtenerDatosCliente(datos) {
     ];
 
     if (campos.some((campo) => !campo || !campo.trim())) {
-      throw httpError(400, 'El cliente no tiene sus datos fiscales completos');
+      throw httpError(
+        400,
+        'El cliente no tiene sus datos fiscales completos'
+      );
     }
   }
 
-  // Se conserva una copia de los datos del cliente al momento de la venta.
   return {
     clienteId: cliente.id,
     clienteNombre: cliente.nombre,
@@ -69,43 +93,177 @@ async function obtenerDatosCliente(datos) {
   };
 }
 
-// datos: body ya validado por Zod. contexto: { usuarioId, sucursal } (salen del token JWT).
-async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECTO } = {}) {
+// Calcular y descontar los ingredientes de las recetas.
+async function descontarIngredientes(
+  lineas,
+  pedidoId,
+  usuarioId,
+  transaccion
+) {
+  const productosElaborados = lineas.filter(
+    (linea) => linea.tipoProducto === 'elaborado'
+  );
+
+  const productosReventa = lineas.filter(
+    (linea) => linea.tipoProducto === 'reventa'
+  );
+
+  if (
+    productosElaborados.length + productosReventa.length !== lineas.length
+  ) {
+    throw httpError(
+      409,
+      'Existe un producto sin tipo valido. Verifica tipo_producto.'
+    );
+  }
+
+  if (productosElaborados.length === 0) {
+    return;
+  }
+
+  const ids = productosElaborados.map(
+    (producto) => producto.productoId
+  );
+
+  const detalles = await recetaRepository.obtenerPorProductos(
+    ids,
+    transaccion
+  );
+
+  const productosConReceta = new Set(
+    detalles.map((detalle) => detalle.productoId)
+  );
+
+  for (const producto of productosElaborados) {
+    if (!productosConReceta.has(producto.productoId)) {
+      throw httpError(
+        409,
+        `El producto "${producto.nombre}" no tiene una receta activa con ingredientes`
+      );
+    }
+  }
+
+  // Agrupar el consumo por insumo para no descontar varias veces
+  // el mismo ingrediente cuando aparece en distintas recetas.
+  const consumos = new Map();
+
+  for (const detalle of detalles) {
+    const linea = productosElaborados.find(
+      (producto) => producto.productoId === detalle.productoId
+    );
+
+    if (!linea) {
+      continue;
+    }
+
+    const rendimiento = Number(detalle.rendimiento);
+    const cantidadReceta = Number(detalle.cantidad);
+
+    if (
+      !Number.isFinite(rendimiento) ||
+      rendimiento <= 0 ||
+      !Number.isFinite(cantidadReceta) ||
+      cantidadReceta <= 0
+    ) {
+      throw httpError(
+        409,
+        `La receta del producto "${linea.nombre}" tiene cantidades invalidas`
+      );
+    }
+
+    // Cantidad del ingrediente por unidad vendida.
+    const consumo =
+      (cantidadReceta / rendimiento) * linea.cantidad;
+
+    const anterior = consumos.get(detalle.insumoId) ?? 0;
+
+    consumos.set(detalle.insumoId, anterior + consumo);
+  }
+
+  // Aplicar movimientos en orden estable para reducir conflictos.
+  const insumosOrdenados = [...consumos.entries()]
+    .sort((a, b) => a[0] - b[0]);
+
+  for (const [insumoId, consumoOriginal] of insumosOrdenados) {
+    const consumo = Math.round(consumoOriginal * 1000) / 1000;
+
+    if (
+      !Number.isFinite(consumo) ||
+      consumo <= 0 ||
+      Math.abs(consumoOriginal - consumo) > 0.0000001
+    ) {
+      throw httpError(
+        409,
+        `El consumo calculado del insumo ${insumoId} supera la precision permitida de 3 decimales`
+      );
+    }
+
+    await inventarioService.aplicarMovimiento(
+      {
+        insumoId,
+        sucursalId: SUCURSAL_INVENTARIO_ID,
+        usuarioId,
+        tipo: 'salida',
+        cantidad: consumo,
+        referenciaTipo: 'pedido',
+        referenciaId: pedidoId,
+        motivo: 'Consumo de ingredientes por venta',
+      },
+      transaccion
+    );
+  }
+}
+
+// Crear un pedido y descontar inventario en una sola transaccion.
+async function crearPedido(
+  datos,
+  { usuarioId = null, sucursal = SUCURSAL_DEFECTO } = {}
+) {
   const itemsAgrupados = agruparItems(datos.items);
   const datosCliente = await obtenerDatosCliente(datos);
 
-  // Todo lo que sigue es "todo o nada": si algo falla se deshace y no se gasta ningún correlativo.
   return ejecutarEnTransaccion(async (transaccion) => {
-    // 1. Traer los productos del pedido (los precios SIEMPRE vienen de la base, nunca del front).
+    // 1. Consultar productos activos y sus precios reales.
     const productos = await productoRepository.buscarPorIds(
       itemsAgrupados.map((item) => item.productoId),
-      transaccion,
+      transaccion
     );
 
     const productosPorId = new Map(
       productos.map((producto) => [producto.id, producto])
     );
 
-    // 2. Validar que todos existan y armar las líneas con el precio real.
+    // 2. Validar productos y preparar lineas.
     const lineas = itemsAgrupados.map((item) => {
       const producto = productosPorId.get(item.productoId);
 
       if (!producto) {
-        throw httpError(400, `El producto ${item.productoId} no existe o no está disponible`);
+        throw httpError(
+          400,
+          `El producto ${item.productoId} no existe o no esta disponible`
+        );
       }
 
       return {
         ...producto,
         productoId: item.productoId,
-        cantidad: item.cantidad
+        cantidad: item.cantidad,
       };
     });
 
-    // 3. Calcular subtotal, IVA (13%) y total en el servidor.
-    const { subtotalCents, ivaCents, totalCents } = calcularTotales(lineas);
+    // 3. Calcular subtotal, IVA y total.
+    const {
+      subtotalCents,
+      ivaCents,
+      totalCents
+    } = calcularTotales(lineas);
 
-    // 4. Correlativos: número de pedido y número del comprobante (cada tipo con su propio contador).
-    const numero = await siguienteCorrelativo('pedido', sucursal, transaccion);
+    // 4. Obtener correlativos.
+    const numero = await siguienteCorrelativo(
+      'pedido',
+      sucursal,
+      transaccion
+    );
 
     const numeroComprobante = await siguienteCorrelativo(
       datos.tipoComprobante,
@@ -113,7 +271,7 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
       transaccion
     );
 
-    // 5. Guardar el pedido, los datos del cliente y su detalle.
+    // 5. Insertar encabezado del pedido.
     const { id, fecha } = await pedidoRepository.insertar(
       {
         numero,
@@ -129,9 +287,10 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
         usuarioId,
         ...datosCliente,
       },
-      transaccion,
+      transaccion
     );
 
+    // 6. Insertar detalle.
     for (const linea of lineas) {
       await pedidoRepository.insertarDetalle(
         {
@@ -142,9 +301,17 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
           precioUnitCents: linea.precioCents,
           subtotalCents: linea.precioCents * linea.cantidad,
         },
-        transaccion,
+        transaccion
       );
     }
+
+    // 7. Descontar ingredientes de productos elaborados.
+    await descontarIngredientes(
+      lineas,
+      id,
+      usuarioId,
+      transaccion
+    );
 
     return {
       id,
@@ -152,24 +319,26 @@ async function crearPedido(datos, { usuarioId = null, sucursal = SUCURSAL_DEFECT
       subtotalCents,
       ivaCents,
       totalCents,
-      fecha, // se serializa como ISO 8601 en UTC, p. ej. "2026-11-22T18:09:00.000Z"
-      // Campos extra (no están en el contrato original) útiles para imprimir el comprobante:
+      fecha,
       tipoComprobante: datos.tipoComprobante,
       numeroComprobante: formatearNumero(numeroComprobante, 6),
     };
   });
 }
 
-// Da formato de salida a una fila de la base: números con ceros a la izquierda.
+// Dar formato de salida a una fila de pedido.
 function darFormato(fila) {
   return {
     ...fila,
     numero: formatearNumero(fila.numero),
-    numeroComprobante: formatearNumero(fila.numeroComprobante, 6),
+    numeroComprobante: formatearNumero(
+      fila.numeroComprobante,
+      6
+    ),
   };
 }
 
-// filtros: ya validados por Zod (texto). Devuelve { total, pagina, limite, pedidos }.
+// Listar pedidos con filtros y paginacion.
 async function listarPedidos(filtros = {}) {
   const pagina = filtros.pagina ?? 1;
   const limite = filtros.limite ?? 20;
@@ -197,11 +366,11 @@ async function listarPedidos(filtros = {}) {
     total,
     pagina,
     limite,
-    pedidos: filas.map(darFormato)
+    pedidos: filas.map(darFormato),
   };
 }
 
-// Un pedido con sus líneas. 404 si no existe.
+// Obtener un pedido con sus lineas.
 async function obtenerPedido(id) {
   const pedido = await pedidoRepository.obtenerPorId(id);
 
@@ -213,12 +382,44 @@ async function obtenerPedido(id) {
 
   return {
     ...darFormato(pedido),
-    items
+    items,
   };
 }
 
-// Anula el pedido (no lo borra). 404 si no existe, 409 si ya estaba anulado.
-async function anularPedido(id, { usuarioId = null, motivo } = {}) {
+// Devolver exactamente los ingredientes descontados por la venta.
+async function devolverIngredientes(
+  pedidoId,
+  usuarioId,
+  transaccion
+) {
+  const movimientos =
+    await inventarioRepository.listarSalidasPorPedido(
+      pedidoId,
+      transaccion
+    );
+
+  for (const movimiento of movimientos) {
+    await inventarioService.aplicarMovimiento(
+      {
+        insumoId: movimiento.insumoId,
+        sucursalId: movimiento.sucursalId,
+        usuarioId,
+        tipo: 'devolucion',
+        cantidad: Number(movimiento.cantidad),
+        referenciaTipo: 'pedido',
+        referenciaId: pedidoId,
+        motivo: 'Devolucion de ingredientes por anulacion',
+      },
+      transaccion
+    );
+  }
+}
+
+// Anular un pedido y devolver sus ingredientes.
+async function anularPedido(
+  id,
+  { usuarioId = null, motivo } = {}
+) {
   return ejecutarEnTransaccion(async (transaccion) => {
     const anulado = await pedidoRepository.anular(
       { id, usuarioId, motivo },
@@ -226,7 +427,10 @@ async function anularPedido(id, { usuarioId = null, motivo } = {}) {
     );
 
     if (!anulado) {
-      const existente = await pedidoRepository.obtenerPorId(id, transaccion);
+      const existente = await pedidoRepository.obtenerPorId(
+        id,
+        transaccion
+      );
 
       if (!existente) {
         throw httpError(404, 'Pedido no encontrado');
@@ -235,11 +439,17 @@ async function anularPedido(id, { usuarioId = null, motivo } = {}) {
       throw httpError(409, 'El pedido ya estaba anulado');
     }
 
-    // TODO (Back C): aquí se devolverá el stock de cada línea (revertirStockPorAnulacion(transaccion, lineas)).
-    //   Va dentro de esta transacción para que la anulación y la devolución de stock sean "todo o nada".
-    // Los correlativos (pedido y comprobante) NO se reutilizan: el documento anulado sigue existiendo.
+    // Devolver los movimientos originales de la venta.
+    await devolverIngredientes(
+      id,
+      usuarioId,
+      transaccion
+    );
 
-    const pedido = await pedidoRepository.obtenerPorId(id, transaccion);
+    const pedido = await pedidoRepository.obtenerPorId(
+      id,
+      transaccion
+    );
 
     return darFormato(pedido);
   });

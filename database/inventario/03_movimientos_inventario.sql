@@ -1,31 +1,36 @@
--- historial de entradas y salidas del inventario
-if object_id('dbo.movimientos_inventario', 'U') is null
-begin
-    create table dbo.movimientos_inventario (
-        id int identity(1,1) primary key,
-        insumo_id int not null,
-        sucursal_id int not null,
-        usuario_id int null,
-        tipo nvarchar(30) not null,
-        cantidad decimal(18,3) not null,
-        stock_anterior decimal(18,3) not null,
-        stock_nuevo decimal(18,3) not null,
-        referencia_tipo nvarchar(30) null,
-        referencia_id int null,
-        motivo nvarchar(250) null,
-        fecha datetime2 not null default sysutcdatetime(),
 
-        constraint FK_movimientos_existencia
-            foreign key (insumo_id, sucursal_id)
-            references dbo.existencias(insumo_id, sucursal_id),
+-- Historial de entradas y salidas del inventario
 
-        constraint FK_movimientos_usuario
-            foreign key (usuario_id)
-            references dbo.usuarios(id),
+IF OBJECT_ID('dbo.movimientos_inventario', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.movimientos_inventario (
+        id INT IDENTITY(1,1) NOT NULL,
+        insumo_id INT NOT NULL,
+        sucursal_id INT NOT NULL,
+        usuario_id INT NULL,
+        tipo NVARCHAR(30) NOT NULL,
+        cantidad DECIMAL(18,3) NOT NULL,
+        stock_anterior DECIMAL(18,3) NOT NULL,
+        stock_nuevo DECIMAL(18,3) NOT NULL,
+        referencia_tipo NVARCHAR(30) NULL,
+        referencia_id INT NULL,
+        motivo NVARCHAR(250) NULL,
+        fecha DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
 
-        constraint CK_movimientos_tipo
-            check (
-                tipo in (
+        CONSTRAINT PK_movimientos_inventario
+            PRIMARY KEY (id),
+
+        CONSTRAINT FK_movimientos_inventario_existencia
+            FOREIGN KEY (insumo_id, sucursal_id)
+            REFERENCES dbo.existencias(insumo_id, sucursal_id),
+
+        CONSTRAINT FK_movimientos_inventario_usuario
+            FOREIGN KEY (usuario_id)
+            REFERENCES dbo.usuarios(id),
+
+        CONSTRAINT CK_movimientos_inventario_tipo
+            CHECK (
+                tipo IN (
                     'entrada',
                     'salida',
                     'ajuste_entrada',
@@ -34,35 +39,35 @@ begin
                 )
             ),
 
-        constraint CK_movimientos_cantidad
-            check (cantidad > 0),
+        CONSTRAINT CK_movimientos_inventario_cantidad
+            CHECK (cantidad > 0),
 
-        constraint CK_movimientos_stock
-            check (
+        CONSTRAINT CK_movimientos_inventario_stock
+            CHECK (
                 stock_anterior >= 0
-                and stock_nuevo >= 0
+                AND stock_nuevo >= 0
             ),
 
-        constraint CK_movimientos_operacion
-            check (
+        CONSTRAINT CK_movimientos_inventario_operacion
+            CHECK (
                 (
-                    tipo in ('entrada', 'ajuste_entrada', 'devolucion')
-                    and stock_nuevo = stock_anterior + cantidad
+                    tipo IN ('entrada', 'ajuste_entrada', 'devolucion')
+                    AND stock_nuevo = stock_anterior + cantidad
                 )
-                or
+                OR
                 (
-                    tipo in ('salida', 'ajuste_salida')
-                    and stock_nuevo = stock_anterior - cantidad
+                    tipo IN ('salida', 'ajuste_salida')
+                    AND stock_nuevo = stock_anterior - cantidad
                 )
             )
     );
 
-    create index IX_movimientos_insumo_fecha
-        on dbo.movimientos_inventario
-        (insumo_id, sucursal_id, fecha desc);
+    CREATE INDEX IX_movimientos_inventario_insumo_fecha
+        ON dbo.movimientos_inventario
+        (insumo_id, sucursal_id, fecha DESC);
 
-    create index IX_movimientos_referencia
-        on dbo.movimientos_inventario
+    CREATE INDEX IX_movimientos_inventario_referencia
+        ON dbo.movimientos_inventario
         (referencia_tipo, referencia_id);
-end;
-go
+END;
+GO

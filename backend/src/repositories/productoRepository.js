@@ -36,20 +36,24 @@ async function buscar({ categoriaId, textoLike } = {}, transaccion) {
   return resultado.recordset;
 }
 
-// Productos activos con esos ids (los que no existan simplemente no vienen en el resultado).
+// Productos activos con esos ids.
 async function buscarPorIds(ids, transaccion) {
   const request = await crearRequest(transaccion);
 
-  // Los marcadores @p0, @p1... los genera este código; los valores van como parámetros.
   const marcadores = ids.map((id, indice) => {
     request.input(`p${indice}`, sql.Int, id);
     return `@p${indice}`;
   });
 
   const resultado = await request.query(`
-    SELECT id, nombre, precio_cents AS precioCents
+    SELECT
+      id,
+      nombre,
+      precio_cents AS precioCents,
+      tipo_producto AS tipoProducto
     FROM dbo.productos
-    WHERE activo = 1 AND id IN (${marcadores.join(', ')})
+    WHERE activo = 1
+      AND id IN (${marcadores.join(', ')})
   `);
 
   return resultado.recordset;
