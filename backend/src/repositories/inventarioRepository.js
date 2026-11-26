@@ -363,6 +363,27 @@ async function listarMovimientos(insumoId, sucursalId, transaccion) {
 
   return resultado.recordset;
 }
+// Obtener las salidas originales de inventario de un pedido.
+// Se bloquean las filas durante la transacción de anulación.
+async function listarSalidasPorPedido(pedidoId, transaccion) {
+  const request = await crearRequest(transaccion);
+
+  const resultado = await request
+    .input('pedidoId', sql.Int, pedidoId)
+    .query(`
+      SELECT
+        insumo_id AS insumoId,
+        sucursal_id AS sucursalId,
+        cantidad
+      FROM dbo.movimientos_inventario WITH (UPDLOCK, HOLDLOCK)
+      WHERE referencia_tipo = 'pedido'
+        AND referencia_id = @pedidoId
+        AND tipo = 'salida'
+      ORDER BY insumo_id, sucursal_id
+    `);
+
+  return resultado.recordset;
+}
 
 module.exports = {
   listar,
@@ -378,4 +399,5 @@ module.exports = {
   actualizarStockMinimo,
   registrarMovimiento,
   listarMovimientos,
+  listarSalidasPorPedido
 };

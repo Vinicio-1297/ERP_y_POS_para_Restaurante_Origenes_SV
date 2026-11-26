@@ -54,6 +54,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Error ejecutando SQL:', error.message);
+  console.error('Error ejecutando SQL:', error);
   process.exit(1);
 });

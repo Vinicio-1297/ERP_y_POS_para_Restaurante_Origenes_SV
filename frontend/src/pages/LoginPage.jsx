@@ -132,17 +132,14 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <aside className="login-welcome">
-        <div className="login-brand">
-          <h1>Orígenes</h1>
-          <small>Restaurante</small>
-        </div>
+        
 
         <h2 className="login-hello">¡Bienvenido!</h2>
 
         <img
           className="login-photo"
-          src="/img/productos/croissant.jpg"
-          alt="Croissant servido en un plato sobre una mesa de madera"
+          src="/img/logo/logo-crema.png"
+          alt="logo del restaurante Orígenes"
         />
 
         <div className="login-tagline">
