@@ -31,12 +31,14 @@
 .app-logo {
   display: grid;
   place-items: center;
-  width: 80px;
   height: 52px;
-  background: #000;
-  color: #20a4ea;
-  font-weight: 800;
-  font-size: 1.4rem;
+  padding: 0 0.75rem;
+}
+
+.app-logo img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
 }
 
 .app-search {

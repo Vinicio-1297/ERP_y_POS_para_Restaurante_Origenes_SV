@@ -46,7 +46,8 @@ export default function AppLayout() {
 
       <header className="app-topbar">
         <div className="app-logo" aria-label="Orígenes SV">
-          POS
+          <img src="/img/logo/origenes-logo-negro.png" 
+          alt="Orígenes SV" />
         </div>
 
         {location.pathname === '/pos' && (
