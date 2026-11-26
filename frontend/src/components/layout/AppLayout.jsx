@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import formatToday from '../../utils/formatToday.js';
 import {
   UncontrolledDropdown,
@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { to: '/pos', label: 'POS', icon: '▦' },
   { to: '/inventario', label: 'Inventario', icon: '📦' },
   { to: '/compras', label: 'Compras', icon: '🚚' },
-  { to: '/pedidos', label: 'Pedidos', icon: '📋' },
   { to: '/caja', label: 'Caja', icon: '💵' },
   { to: '/rrhh', label: 'RRHH', icon: '👥' },
 ];
@@ -23,6 +22,7 @@ const NAV_ITEMS = [
 export default function AppLayout() {
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [usuario] = useState(() => {
     try {
@@ -49,15 +49,17 @@ export default function AppLayout() {
           POS
         </div>
 
-        <label className="app-search">
-          <span aria-hidden="true">🔍</span>
-          <input
-            type="search"
-            placeholder="Buscar en el menú lo que se pide más rápido"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
+        {location.pathname === '/pos' && (
+          <label className="app-search">
+            <span aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              placeholder="Buscar en el menú lo que se pide más rápido"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+        )}
 
         <time className="app-date">
           {formatToday()}
@@ -97,8 +99,8 @@ export default function AppLayout() {
 
         {NAV_ITEMS.map((item) => {
 
-          const deshabilitado = esCajero && item.to !== '/pos';
-
+          const deshabilitado = esCajero && item.to !== '/pos' && item.to !== '/caja';
+          
           if (deshabilitado) {
             return (
               <div

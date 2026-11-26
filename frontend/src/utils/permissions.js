@@ -12,7 +12,6 @@ const MODULES = {
   COMPRAS: 'compras',
   PROVEEDORES: 'proveedores',
   CUENTAS_POR_PAGAR: 'cuentas-por-pagar',
-  PEDIDOS: 'pedidos',
   CAJA: 'caja',
   RRHH: 'rrhh',
 };
@@ -52,7 +51,7 @@ export function canAccessModule(module) {
   }
 
   if (role === ROLES.CASHIER) {
-    return module === MODULES.POS;
+    return module === MODULES.POS || module === MODULES.CAJA;
   }
 
   return false;
