@@ -24,6 +24,7 @@ export default function CuentasPorPagarPage() {
   const [proveedores, setProveedores] = useState(proveedoresService.list);
   const [compras, setCompras] = useState(comprasService.list);
   const [expanded, setExpanded] = useState(null);
+  const [enfocadaId, setEnfocadaId] = useState(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('Todas');
   const [form, setForm] = useState(initialForm);
@@ -57,6 +58,7 @@ export default function CuentasPorPagarPage() {
   const totalPendiente = withBalance.reduce((sum, f) => sum + f.saldoCents, 0);
   const pendientes = withBalance.filter((f) => f.saldoCents > 0).length;
   const vencidas = withBalance.filter((f) => f.estado === 'Vencida').length;
+  const facturaEnfocada = visible.find(f => String(f.id) === String(enfocadaId)) || visible[0] || null;
 
   function saveInvoice(event) {
     event.preventDefault();
@@ -98,18 +100,21 @@ export default function CuentasPorPagarPage() {
   }
 
   return (
-    <section className="cpp-page">
-      <header className="cpp-head">
-        <div><h1>Cuentas por pagar</h1><p>Facturas a crédito, vencimientos y abonos a proveedores.</p></div>
-      </header>
+    <div className="frontb-workspace">
       <FrontBNav />
+      <section className="cpp-page">
+      <header className="cpp-head">
+        <div><span className="frontb-eyebrow">GESTIÓN / FRONT B</span><h1>Cuentas por pagar</h1><p>Controlá vencimientos, saldos y registros de abonos</p></div>
+        <button type="button" className="cpp-primary" onClick={() => { setError(''); setForm(initialForm()); setSelected(null); setShowForm(true); }}>+ Registrar factura</button>
+      </header>
       <div className="cpp-stats">
         <article><span>Saldo pendiente</span><strong>{formatMoney(totalPendiente)}</strong></article>
         <article><span>Facturas por pagar</span><strong>{pendientes}</strong></article>
         <article><span>Facturas vencidas</span><strong>{vencidas}</strong></article>
       </div>
+      <div className="frontb-split frontb-split--payables">
       <section className="cpp-panel">
-        <div className="frontb-panel-actions"><h2>Facturas a crédito</h2><button type="button" className="cpp-primary" onClick={() => { setError(''); setForm(initialForm()); setSelected(null); setShowForm(true); }}>+ Registrar factura</button></div>
+        <div className="frontb-panel-actions"><div><h2>Facturas a crédito</h2><p className="frontb-section-note">Filtrá por estado o seleccioná una factura</p></div></div>
         <div className="cpp-filters">
           <input aria-label="Buscar facturas" placeholder="Buscar factura o proveedor..." value={query} onChange={(e) => setQuery(e.target.value)} />
           <select aria-label="Filtrar estado" value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -118,8 +123,8 @@ export default function CuentasPorPagarPage() {
         </div>
         <div className="cpp-table-scroll"><table>
           <thead><tr><th>FACTURA</th><th>PROVEEDOR</th><th>COMPRA</th><th>VENCE</th><th>TOTAL</th><th>SALDO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
-          <tbody>{visible.length === 0 ? <tr><td colSpan={8} className="cpp-empty">No hay facturas con esos criterios.</td></tr> : visible.map((f) => <tr key={f.id}>
-            <td>{f.factura}</td><td>{displayProveedor(f)}</td><td>{f.fecha}</td><td>{f.vencimiento}</td>
+          <tbody>{visible.length === 0 ? <tr><td colSpan={8} className="cpp-empty">No hay facturas con esos criterios.</td></tr> : visible.map((f) => <tr key={f.id} className={facturaEnfocada?.id === f.id ? 'frontb-row-selected' : ''}>
+            <td><button type="button" className="frontb-table-select" onClick={() => setEnfocadaId(f.id)}>{f.factura}</button></td><td>{displayProveedor(f)}</td><td>{f.fecha}</td><td>{f.vencimiento}</td>
             <td>{formatMoney(f.totalCents)}</td><td>{formatMoney(f.saldoCents)}</td>
             <td><span className={`cpp-status cpp-${f.estado.toLowerCase()}`}>{f.estado}</span></td>
             <td className="cpp-row-actions">
@@ -135,6 +140,19 @@ export default function CuentasPorPagarPage() {
           </tbody>
         </table></div>
       </section>
+      <aside className="cpp-panel frontb-detail-panel">
+        <span className="frontb-detail-kicker">DETALLE DE FACTURA</span>
+        {facturaEnfocada ? <>
+          <h2>{facturaEnfocada.factura}</h2>
+          <p className="frontb-section-note">{displayProveedor(facturaEnfocada)} · Vence {facturaEnfocada.vencimiento}</p>
+          <span className={`cpp-status cpp-${facturaEnfocada.estado.toLowerCase()}`}>{facturaEnfocada.estado}</span>
+          <div className="frontb-detail-highlight frontb-detail-highlight--money"><small>SALDO POR PAGAR</small><strong>{formatMoney(facturaEnfocada.saldoCents)}</strong><small>De un total de {formatMoney(facturaEnfocada.totalCents)}</small></div>
+          <h3>Historial de abonos</h3>
+          <ul className="frontb-detail-list">{facturaEnfocada.pagos.length ? facturaEnfocada.pagos.map(p => <li key={p.id}><span>{p.fecha}<small>{p.metodo}</small></span><strong>{formatMoney(p.montoCents)}</strong></li>) : <li>Todavía no hay abonos registrados.</li>}</ul>
+          <button type="button" className="cpp-primary frontb-detail-action" disabled={facturaEnfocada.saldoCents <= 0} onClick={() => { setSelected(facturaEnfocada.id); setError(''); }}>Registrar abono</button>
+        </> : <p className="frontb-empty-side">Seleccioná una factura para ver su detalle.</p>}
+      </aside>
+      </div>
       <p className="cpp-helper">Las facturas manuales se guardan solo en este navegador. Las compras a crédito del sistema todavía necesitan integración contable de Back C.</p>
       {creditosEnCompras.length > 0 && <div className="cpp-panel cpp-preview">
         <h2>Créditos de compras (vista previa)</h2>
@@ -167,6 +185,7 @@ export default function CuentasPorPagarPage() {
           </form>
         </section>
       </div>}
-    </section>
+      </section>
+    </div>
   );
 }

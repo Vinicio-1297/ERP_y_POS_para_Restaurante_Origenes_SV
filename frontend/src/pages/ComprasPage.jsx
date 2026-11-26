@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useFrontBModal from '../hooks/useFrontBModal.js';
-import { comprasService, inventarioService, proveedoresService } from '../services/frontbRepos.js';
+import { comprasService, proveedoresService } from '../services/frontbRepos.js';
+import { listarArticulosParaSeleccion } from '../services/frontbApi.js';
 import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/frontbUtils.js';
 import FrontBNav from '../components/frontb/FrontBNav.jsx';
 import '../styles/compras-feature.css';
@@ -23,9 +24,11 @@ export default function ComprasPage() {
   const [searchParams] = useSearchParams();
   const preselectedId = searchParams.get('inventarioId');
   const [compras, setCompras] = useState(() => comprasService.list().map(normalizeCompra));
-  const [inventario, setInventario] = useState(inventarioService.list);
+  const [inventario, setInventario] = useState([]);
+  const [inventarioError, setInventarioError] = useState('');
   const [proveedores, setProveedores] = useState(proveedoresService.list);
   const [buscar, setBuscar] = useState('');
+  const [enfocadaId, setEnfocadaId] = useState(null);
   const [estadoFiltro, setEstadoFiltro] = useState('Todos');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(initialForm);
@@ -35,11 +38,16 @@ export default function ComprasPage() {
 
   useEffect(() => { comprasService.save(compras); }, [compras]);
   useEffect(() => {
-    const sync = () => { setInventario(inventarioService.list()); setProveedores(proveedoresService.list()); };
-    const uns1 = subscribeRows(STORE_KEYS.inventario, sync);
-    const uns2 = subscribeRows(STORE_KEYS.proveedores, sync);
+    const controller = new AbortController();
+    const sync = () => {
+      setProveedores(proveedoresService.list());
+      listarArticulosParaSeleccion(controller.signal).then(setInventario).then(() => setInventarioError(''))
+        .catch(err => { if (err.name !== 'AbortError') { setInventario([]); setInventarioError(err.message); } });
+    };
+    const uns = subscribeRows(STORE_KEYS.proveedores, sync);
+    sync();
     window.addEventListener('focus', sync);
-    return () => { uns1(); uns2(); window.removeEventListener('focus', sync); };
+    return () => { controller.abort(); uns(); window.removeEventListener('focus', sync); };
   }, []);
   useEffect(() => {
     if (!preselectedId) return;
@@ -70,7 +78,8 @@ export default function ComprasPage() {
       condicionPago: compra.condicionPago, vencimiento: compra.vencimiento || '',
       lineas: compra.lineas.map(l => ({ ...l })) } : initialForm());
     setLinea({ inventarioId: '', cantidad: '', costo: '' });
-    setInventario(inventarioService.list());
+    listarArticulosParaSeleccion().then(setInventario).then(() => setInventarioError(''))
+      .catch(err => { setInventario([]); setInventarioError(err.message); });
     setProveedores(proveedoresService.list());
     setError(''); setModal(true);
   }
@@ -124,20 +133,25 @@ export default function ComprasPage() {
     if (compra.estado !== 'Borrador') return;
     if (window.confirm(`¿Eliminar el borrador ${compra.numero}?`)) setCompras(old => old.filter(c => c.id !== compra.id));
   }
+  const compraEnfocada = filtradas.find(c => String(c.id) === String(enfocadaId)) || filtradas[0] || null;
   return (
-    <section className="cmp-page">
-      <header className="cmp-header">
-        <div><h1>Compras</h1><p>Registro de facturas, proveedores y artículos adquiridos</p></div>
-      </header>
+    <div className="frontb-workspace">
       <FrontBNav />
+      <section className="cmp-page">
+      <header className="cmp-header">
+        <div><span className="frontb-eyebrow">GESTIÓN / FRONT B</span><h1>Compras</h1><p>Gestioná facturas, líneas de compra y recepción de insumos</p></div>
+        <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>
+      </header>
+      {inventarioError && <p role="alert" className="cmp-error">No se pudo consultar Inventario: {inventarioError}</p>}
       <div className="cmp-stats">
         <article><span>Compras registradas</span><strong>{compras.length}</strong></article>
         <article><span>Recibidas</span><strong>{recibidas}</strong></article>
         <article><span>Borradores</span><strong>{pendientes}</strong></article>
         <article><span>Total registrado</span><strong>{formatMoney(totalRegistrado)}</strong></article>
       </div>
+      <div className="frontb-split frontb-split--purchases">
       <section className="cmp-panel">
-        <div className="cmp-panel-head"><div className="frontb-panel-actions"><h2>Facturas de compra</h2><button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button></div>
+        <div className="cmp-panel-head"><div className="frontb-panel-actions"><div><h2>Facturas de compra</h2><p className="frontb-section-note">Seguimiento por factura, proveedor y estado</p></div></div>
           <div className="cmp-filters">
             <input aria-label="Buscar compras" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar factura o proveedor..." />
             <select aria-label="Filtrar por estado" value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
@@ -148,8 +162,8 @@ export default function ComprasPage() {
         <div className="cmp-table-wrap"><table><thead><tr>
           <th>FACTURA</th><th>PROVEEDOR</th><th>FECHA</th><th>TOTAL</th><th>PAGO</th><th>ESTADO</th><th>ACCIONES</th>
         </tr></thead><tbody>
-          {filtradas.map(c => <tr key={c.id}>
-            <td>{c.numero}</td><td>{displayProveedor(c)}</td><td>{c.fecha}</td><td>{formatMoney(c.totalCents)}</td><td>{c.condicionPago}</td>
+          {filtradas.map(c => <tr key={c.id} className={compraEnfocada?.id === c.id ? 'frontb-row-selected' : ''}>
+            <td><button type="button" className="frontb-table-select" onClick={() => setEnfocadaId(c.id)}>{c.numero}</button></td><td>{displayProveedor(c)}</td><td>{c.fecha}</td><td>{formatMoney(c.totalCents)}</td><td>{c.condicionPago}</td>
             <td><span className={`cmp-status ${c.estado === 'Recibida' ? 'ok' : 'draft'}`}>{c.estado}</span></td>
             <td><div className="cmp-actions">{c.estado === 'Borrador' ? <>
               <button type="button" onClick={() => abrir(c)}>Editar</button>
@@ -160,6 +174,19 @@ export default function ComprasPage() {
           {filtradas.length === 0 && <tr><td colSpan={7} className="cmp-empty">No hay compras registradas con estos filtros.</td></tr>}
         </tbody></table></div>
       </section>
+      <aside className="cmp-panel frontb-detail-panel">
+        <span className="frontb-detail-kicker">COMPRA SELECCIONADA</span>
+        {compraEnfocada ? <>
+          <h2>{displayProveedor(compraEnfocada)}</h2>
+          <p className="frontb-section-note">Factura {compraEnfocada.numero} · {compraEnfocada.fecha}</p>
+          <span className={`cmp-status ${compraEnfocada.estado === 'Recibida' ? 'ok' : 'draft'}`}>{compraEnfocada.estado}</span>
+          <h3>Detalle de artículos</h3>
+          <ul className="frontb-detail-list">{compraEnfocada.lineas.map(l => <li key={l.id}><span>{inventario.find(i => String(i.id) === String(l.inventarioId))?.nombre || 'Artículo del inventario'}<small>{l.cantidad} {l.unidad}</small></span><strong>{formatMoney(l.costoCents * Number(l.cantidad))}</strong></li>)}</ul>
+          <div className="frontb-detail-total"><span>Total de la factura</span><strong>{formatMoney(compraEnfocada.totalCents)}</strong></div>
+          {compraEnfocada.estado === 'Borrador' && <button className="cmp-primary frontb-detail-action" type="button" onClick={() => abrir(compraEnfocada)}>Editar compra</button>}
+        </> : <p className="frontb-empty-side">Seleccioná una factura para ver sus artículos.</p>}
+      </aside>
+      </div>
       {modal && <div className="cmp-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
         <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="cmp-dialog-title" className="cmp-dialog">
           <div className="cmp-dialog-head"><h2 id="cmp-dialog-title">{editingId ? 'Editar compra' : 'Registrar compra'}</h2><button type="button" aria-label="Cerrar" className="cmp-close" onClick={close}>×</button></div>
@@ -200,6 +227,7 @@ export default function ComprasPage() {
           </form>
         </div>
       </div>}
-    </section>
+      </section>
+    </div>
   );
 }
