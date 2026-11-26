@@ -4,9 +4,16 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Reenvía las llamadas de la interfaz a la API durante el desarrollo.
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+
+    // reenvia las llamadas de la interfaz a la API
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': {
+        target: process.env.API_PROXY_TARGET || 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 });

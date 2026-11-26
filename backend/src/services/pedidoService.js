@@ -1,4 +1,3 @@
-
 // Logica de negocio del POS.
 const { ejecutarEnTransaccion } = require('../config/transaccion');
 const correlativoRepository = require('../repositories/correlativoRepository');
@@ -7,6 +6,7 @@ const productoRepository = require('../repositories/productoRepository');
 const clienteRepository = require('../repositories/clienteRepository');
 const recetaRepository = require('../repositories/recetaRepository');
 const inventarioRepository = require('../repositories/inventarioRepository');
+const sucursalRepository = require('../repositories/sucursalRepository');
 const inventarioService = require('./inventarioService');
 
 const { httpError } = require('../utils/httpError');
@@ -18,9 +18,6 @@ const {
 const { rangoDeFechas } = require('../utils/fechas');
 
 const SUCURSAL_DEFECTO = 'Restaurante';
-
-// Por ahora el POS trabaja con la sucursal Restaurante.
-const SUCURSAL_INVENTARIO_ID = 1;
 
 // Obtener el siguiente numero visual del pedido.
 async function obtenerProximoNumero(sucursal = SUCURSAL_DEFECTO) {
@@ -98,6 +95,7 @@ async function descontarIngredientes(
   lineas,
   pedidoId,
   usuarioId,
+  sucursalId,
   transaccion
 ) {
   const productosElaborados = lineas.filter(
@@ -201,7 +199,7 @@ async function descontarIngredientes(
     await inventarioService.aplicarMovimiento(
       {
         insumoId,
-        sucursalId: SUCURSAL_INVENTARIO_ID,
+        sucursalId,
         usuarioId,
         tipo: 'salida',
         cantidad: consumo,
@@ -223,7 +221,23 @@ async function crearPedido(
   const datosCliente = await obtenerDatosCliente(datos);
 
   return ejecutarEnTransaccion(async (transaccion) => {
-    // 1. Consultar productos activos y sus precios reales.
+    // 1. Obtener la sucursal activa y su id real.
+    const sucursalActual =
+      await sucursalRepository.buscarActivaPorNombre(
+        sucursal,
+        transaccion
+      );
+
+    if (!sucursalActual) {
+      throw httpError(
+        409,
+        `La sucursal "${sucursal}" no existe o esta desactivada`
+      );
+    }
+
+    const sucursalId = sucursalActual.id;
+
+    // 2. Consultar productos activos y sus precios reales.
     const productos = await productoRepository.buscarPorIds(
       itemsAgrupados.map((item) => item.productoId),
       transaccion
@@ -233,7 +247,7 @@ async function crearPedido(
       productos.map((producto) => [producto.id, producto])
     );
 
-    // 2. Validar productos y preparar lineas.
+    // 3. Validar productos y preparar lineas.
     const lineas = itemsAgrupados.map((item) => {
       const producto = productosPorId.get(item.productoId);
 
@@ -251,14 +265,14 @@ async function crearPedido(
       };
     });
 
-    // 3. Calcular subtotal, IVA y total.
+    // 4. Calcular subtotal, IVA y total.
     const {
       subtotalCents,
       ivaCents,
       totalCents
     } = calcularTotales(lineas);
 
-    // 4. Obtener correlativos.
+    // 5. Obtener correlativos.
     const numero = await siguienteCorrelativo(
       'pedido',
       sucursal,
@@ -271,7 +285,7 @@ async function crearPedido(
       transaccion
     );
 
-    // 5. Insertar encabezado del pedido.
+    // 6. Insertar encabezado del pedido.
     const { id, fecha } = await pedidoRepository.insertar(
       {
         numero,
@@ -290,7 +304,7 @@ async function crearPedido(
       transaccion
     );
 
-    // 6. Insertar detalle.
+    // 7. Insertar detalle.
     for (const linea of lineas) {
       await pedidoRepository.insertarDetalle(
         {
@@ -305,11 +319,12 @@ async function crearPedido(
       );
     }
 
-    // 7. Descontar ingredientes de productos elaborados.
+    // 8. Descontar ingredientes del inventario de la sucursal.
     await descontarIngredientes(
       lineas,
       id,
       usuarioId,
+      sucursalId,
       transaccion
     );
 
