@@ -34,4 +34,10 @@ router.get(
   authController.me
 );
 
+// informacion de soporte para recuperar la contrasena
+router.get(
+  '/auth/soporte',
+  authController.soporte
+);
+
 module.exports = router;

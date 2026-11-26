@@ -8,10 +8,8 @@ import {
 } from 'react-router-dom';
 
 import AppLayout from '../components/layout/AppLayout.jsx';
-
 import HealthPage from '../pages/HealthPage.jsx';
 import LoginPage from '../pages/LoginPage.jsx';
-import PlaceholderPage from '../pages/PlaceHolder.jsx';
 import PosPage from '../pages/posPage.jsx';
 
 import InventarioPage from '../pages/InventarioPage.jsx';
@@ -148,21 +146,13 @@ export default function AppRoutes() {
             }
           />
 
-          {/* Pedidos */}
-          <Route
-            path="/pedidos"
-            element={
-              <RequireRole roles={['administrador', 'gerente']}>
-                <PlaceholderPage title="Pedidos" />
-              </RequireRole>
-            }
-          />
+          
 
           {/* Caja */}
           <Route
             path="/caja"
             element={
-              <RequireRole roles={['administrador', 'gerente']}>
+              <RequireRole roles={['administrador', 'gerente', 'cajero']}>
                 <CajaPage />
               </RequireRole>
             }

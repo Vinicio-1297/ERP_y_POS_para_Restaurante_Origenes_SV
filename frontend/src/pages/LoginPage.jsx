@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login } from '../services/authService.js';
+import { login, obtenerSoporte } from '../services/authService.js';
 import formatToday from '../utils/formatToday.js';
 import '../styles/login.css';
 
@@ -12,7 +12,7 @@ const ROLES = [
 
 function UserIcon() {
   return (
-     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
     </svg>
@@ -28,7 +28,6 @@ function LockIcon() {
   );
 }
 
-
 function EyeIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -37,7 +36,6 @@ function EyeIcon() {
     </svg>
   );
 }
-
 
 function EyeOffIcon() {
   return (
@@ -76,17 +74,53 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
- 
+
+  const [soporte, setSoporte] = useState(null);
+  const [loadingSoporte, setLoadingSoporte] = useState(false);
+  const [errorSoporte, setErrorSoporte] = useState('');
+
+  // consultar el mensaje de soporte
+  async function handleForgotPassword(event) {
+    event.preventDefault();
+
+    if (loadingSoporte) return;
+
+    if (soporte) {
+      setSoporte(null);
+      return;
+    }
+
+    setLoadingSoporte(true);
+    setErrorSoporte('');
+
+    try {
+      const resultado = await obtenerSoporte();
+      setSoporte(resultado);
+    } catch (err) {
+      setErrorSoporte(err.message);
+    } finally {
+      setLoadingSoporte(false);
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
     setLoading(true);
- 
+
     try {
-      const { token, usuario } = await login({ rol, correo: correo.trim(), password });
-      // Provisional: el manejo de sesión (contexto, expiración, rutas protegidas) se define con el backend.
+      const { token, usuario } = await login({
+        rol,
+        correo: correo.trim(),
+        password
+      });
+
       sessionStorage.setItem('origenes.token', token);
-      sessionStorage.setItem('origenes.usuario', JSON.stringify(usuario ?? { rol }));
+      sessionStorage.setItem(
+        'origenes.usuario',
+        JSON.stringify(usuario ?? { rol })
+      );
+
       navigate('/pos', { replace: true });
     } catch (err) {
       setError(err.message);
@@ -94,7 +128,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
- 
+
   return (
     <div className="login-page">
       <aside className="login-welcome">
@@ -102,46 +136,61 @@ export default function LoginPage() {
           <h1>Orígenes</h1>
           <small>Restaurante</small>
         </div>
- 
+
         <h2 className="login-hello">¡Bienvenido!</h2>
- 
+
         <img
           className="login-photo"
           src="/img/productos/croissant.jpg"
           alt="Croissant servido en un plato sobre una mesa de madera"
         />
- 
+
         <div className="login-tagline">
           <p>El sabor de nuestras raíces</p>
           <p>Gracias por formar parte de Orígenes</p>
         </div>
       </aside>
- 
+
       <main className="login-main">
         <time className="login-date">{formatToday()}</time>
- 
+
         <section className="login-card">
           <h2>Iniciar sesión</h2>
-          <p className="login-subtitle">Ingresa tus credenciales para acceder al sistema</p>
- 
+          <p className="login-subtitle">
+            Ingresa tus credenciales para acceder al sistema
+          </p>
+
           <form onSubmit={handleSubmit}>
             <div className="login-field">
               <label htmlFor="login-rol">Selecciona tu rol</label>
+
               <div className="login-control">
                 <span className="login-icon"><UserIcon /></span>
-                <select id="login-rol" value={rol} onChange={(event) => setRol(event.target.value)}>
+
+                <select
+                  id="login-rol"
+                  value={rol}
+                  onChange={(event) => setRol(event.target.value)}
+                >
                   {ROLES.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
                   ))}
                 </select>
-                <span className="login-icon login-icon--end"><ChevronIcon /></span>
+
+                <span className="login-icon login-icon--end">
+                  <ChevronIcon />
+                </span>
               </div>
             </div>
- 
+
             <div className="login-field">
               <label htmlFor="login-correo">Correo</label>
+
               <div className="login-control">
                 <span className="login-icon"><UserIcon /></span>
+
                 <input
                   id="login-correo"
                   type="email"
@@ -153,11 +202,15 @@ export default function LoginPage() {
                 />
               </div>
             </div>
- 
+
             <div className="login-field">
-              <label htmlFor="login-password">Contraseña/pin de caja</label>
+              <label htmlFor="login-password">
+                Contraseña/pin de caja
+              </label>
+
               <div className="login-control">
                 <span className="login-icon"><LockIcon /></span>
+
                 <input
                   id="login-password"
                   type={showPassword ? 'text' : 'password'}
@@ -167,6 +220,7 @@ export default function LoginPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                 />
+
                 <button
                   type="button"
                   className="login-toggle"
@@ -178,12 +232,41 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
- 
-            <a className="login-forgot" href="#recuperar">¿Olvidaste tu contraseña?</a>
- 
-            {error && <p className="login-error" role="alert">{error}</p>}
- 
-            <button type="submit" className="login-submit" disabled={loading}>
+
+            <a
+              className="login-forgot"
+              href="#recuperar"
+              onClick={handleForgotPassword}
+              aria-expanded={Boolean(soporte)}
+            >
+              {loadingSoporte
+                ? 'Consultando soporte...'
+                : '¿Olvidaste tu contraseña?'}
+            </a>
+
+            {soporte && (
+            <div className="login-support" role="status">
+              <p>{soporte.mensaje}</p>
+            </div>
+            )}
+
+            {errorSoporte && (
+              <p className="login-error" role="alert">
+                {errorSoporte}
+              </p>
+            )}
+
+            {error && (
+              <p className="login-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="login-submit"
+              disabled={loading}
+            >
               <EnterIcon />
               {loading ? 'Ingresando…' : 'Ingresar al POS'}
             </button>

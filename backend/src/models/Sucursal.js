@@ -34,6 +34,7 @@ const Sucursal = sequelize.define('Sucursal', {
   tableName: 'sucursales',
   schema: 'dbo',
   timestamps: false,
+  hasTrigger: true,
 });
 
 module.exports = Sucursal;

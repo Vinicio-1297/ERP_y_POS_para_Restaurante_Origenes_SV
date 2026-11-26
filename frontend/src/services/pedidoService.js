@@ -1,36 +1,13 @@
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { request } from './http.js';
 
-export async function crearPedido(pedido, signal) {
-  const token = sessionStorage.getItem('origenes.token');
-  const response = await fetch(`${apiUrl}/pedidos`, {
+export const crearPedido = (pedido, signal) =>
+  request('/pedidos', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify(pedido),
     signal,
   });
-  const result = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error(result?.message || `No se pudo registrar la venta (HTTP ${response.status})`);
-  }
-
-  return result;
-}
-
-export async function obtenerProximoNumero(signal) {
-  const token = sessionStorage.getItem('origenes.token');
-  const response = await fetch(`${apiUrl}/pedidos/proximo-numero`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal,
-  });
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(result?.message || `No se pudo obtener el número de pedido (HTTP ${response.status})`);
-  }
-
+export const obtenerProximoNumero = async (signal) => {
+  const result = await request('/pedidos/proximo-numero', { signal });
   return result.numero;
-}
+};
