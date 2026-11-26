@@ -497,3 +497,103 @@
   cursor: not-allowed;
   filter: grayscale(1);
 }
+/* ---------- Alertas de stock ---------- */
+.stock-alert ul {
+  margin: 0.4rem 0 0.2rem;
+  padding-left: 1.2rem;
+}
+
+.stock-badge {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.stock-badge.is-bajo {
+  background: #fff3cd;
+  color: #7a5b00;
+}
+
+.stock-badge.is-agotado,
+.stock-badge.is-sin-receta {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.product-card.is-soldout .product-photo,
+.product-card.is-soldout .product-info h3 {
+  opacity: 0.55;
+}
+
+.product-footer button:disabled {
+  background: #a8a29a;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* ---------- Venta registrada ---------- */
+.pos-sale-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pos-sale-actions button {
+  padding: 0.25rem 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+}
+
+/* ---------- Crédito fiscal: datos y alta de cliente ---------- */
+.cliente-fiscal {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+}
+
+.cliente-fiscal div {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cliente-fiscal dt {
+  min-width: 4.2rem;
+  font-weight: 700;
+}
+
+.cliente-fiscal dd {
+  margin: 0;
+}
+
+.order-link {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-brand);
+  font-size: 0.75rem;
+  text-decoration: underline;
+}
+
+.cliente-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.cliente-form-error {
+  color: #842029;
+}
+
+.cliente-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { formatCents } from '../../utils/money.js';
+import ClienteFiscalForm from './ClienteFiscalForm.jsx';
 import ProductPhoto from './ProductPhoto.jsx';
 
 const SERVICE_TYPES = [
@@ -44,8 +46,11 @@ export default function OrderPanel({
   cajaAbierta = true,
   saving = false,
   onAddProduct,
+  onCrearCliente,
 }) {
+  const [creandoCliente, setCreandoCliente] = useState(false);
   const { items, serviceType, receiptType, paymentMethod, totals } = order;
+  const clienteSeleccionado = clientes.find((cliente) => cliente.id === order.clienteId);
   const isDisabled = saving || !cajaAbierta || items.length === 0 ||
     (receiptType === 'credito-fiscal' && !order.clienteId);
 
@@ -131,7 +136,22 @@ export default function OrderPanel({
                 </option>
               ))}
             </select>
+            {clienteSeleccionado && (
+              <dl className="cliente-fiscal">
+                <div><dt>NIT</dt><dd>{clienteSeleccionado.nit}</dd></div>
+                <div><dt>NRC</dt><dd>{clienteSeleccionado.nrc}</dd></div>
+                <div><dt>Giro</dt><dd>{clienteSeleccionado.giro}</dd></div>
+                <div><dt>Dirección</dt><dd>{clienteSeleccionado.direccion}</dd></div>
+              </dl>
+            )}
             {clientes.length === 0 && <small>No hay clientes con datos fiscales completos.</small>}
+            {onCrearCliente && (creandoCliente ? (
+              <ClienteFiscalForm onCrear={onCrearCliente} onCancelar={() => setCreandoCliente(false)} />
+            ) : (
+              <button type="button" className="order-link" onClick={() => setCreandoCliente(true)}>
+                + Nuevo cliente fiscal
+              </button>
+            ))}
           </>
         )}
         <p>Método de pago</p>

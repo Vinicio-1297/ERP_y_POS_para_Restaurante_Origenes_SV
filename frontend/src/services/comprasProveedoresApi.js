@@ -1,7 +1,3 @@
-import {
-  listarCompras,
-  listarProveedores,
-} from '../services/comprasProveedoresApi.js';
 
 
 function getAuthHeaders() {
