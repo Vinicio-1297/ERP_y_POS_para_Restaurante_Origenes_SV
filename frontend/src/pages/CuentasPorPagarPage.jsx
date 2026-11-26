@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import useFrontBModal from '../hooks/useFrontBModal.js';
-import { cuentasPorPagarService, proveedoresService, comprasService } from '../services/frontbRepos.js';
-import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, localDate, newFrontBId } from '../utils/frontbUtils.js';
-import FrontBNav from '../components/frontb/FrontBNav.jsx';
+import useGestionModal from '../hooks/useGestionModal.js';
+import { cuentasPorPagarService, proveedoresService, comprasService } from '../services/gestionRepository.js';
+import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, localDate, newFrontBId } from '../utils/gestionUtils.js';
+import GestionNav from '../components/gestion/GestionNav.jsx';
+import { canCreate, canManage, MODULES } from '../utils/permissions.js';
 import '../styles/cuentas-por-pagar-feature.css';
 
 const initialForm = () => ({ factura: '', proveedorId: '', fecha: '', vencimiento: '', total: '' });
@@ -20,10 +21,12 @@ function invoiceStatus(f, saldo) {
 }
 
 export default function CuentasPorPagarPage() {
+  const puedeCrear = canCreate(MODULES.CUENTAS_POR_PAGAR);
+  const puedeRegistrarAbonos = canManage();
   const [facturas, setFacturas] = useState(() => cuentasPorPagarService.list().map(normalizeInvoice));
   const [proveedores, setProveedores] = useState(proveedoresService.list);
   const [compras, setCompras] = useState(comprasService.list);
-  const [expanded, setExpanded] = useState(null);
+  const [enfocadaId, setEnfocadaId] = useState(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('Todas');
   const [form, setForm] = useState(initialForm);
@@ -32,14 +35,14 @@ export default function CuentasPorPagarPage() {
   const [error, setError] = useState('');
   const [payment, setPayment] = useState({ monto: '', fecha: localDate(), metodo: 'Efectivo' });
 
-  useEffect(() => { cuentasPorPagarService.save(facturas); }, [facturas]);
+  useEffect(() => { if (puedeCrear || puedeRegistrarAbonos) cuentasPorPagarService.save(facturas); }, [facturas, puedeCrear, puedeRegistrarAbonos]);
   useEffect(() => {
     const uns1 = subscribeRows(STORE_KEYS.proveedores, () => setProveedores(proveedoresService.list()));
     const uns2 = subscribeRows(STORE_KEYS.compras, () => setCompras(comprasService.list()));
     return () => { uns1(); uns2(); };
   }, []);
   const close = () => { setShowForm(false); setSelected(null); setError(''); };
-  const dialogRef = useFrontBModal(Boolean(showForm || selected), close);
+  const dialogRef = useGestionModal(Boolean(showForm || selected), close);
   const getProveedor = (f) => proveedores.find(p => String(p.id) === String(f.proveedorId))
     || proveedores.find(p => p.nombre.toLowerCase() === String(f.proveedor).toLowerCase());
   const displayProveedor = (f) => getProveedor(f)?.nombre || f.proveedor || 'Proveedor no encontrado';
@@ -57,9 +60,11 @@ export default function CuentasPorPagarPage() {
   const totalPendiente = withBalance.reduce((sum, f) => sum + f.saldoCents, 0);
   const pendientes = withBalance.filter((f) => f.saldoCents > 0).length;
   const vencidas = withBalance.filter((f) => f.estado === 'Vencida').length;
+  const facturaEnfocada = visible.find(f => String(f.id) === String(enfocadaId)) || null;
 
   function saveInvoice(event) {
     event.preventDefault();
+    if (!puedeCrear) return;
     const totalCents = dollarsToCents(form.total);
     const proveedorData = proveedores.find(p => String(p.id) === String(form.proveedorId));
     if (!form.factura.trim() || !proveedorData || !form.fecha || !form.vencimiento) {
@@ -75,11 +80,13 @@ export default function CuentasPorPagarPage() {
     const invoice = { id: newFrontBId('cpp'), factura: form.factura.trim(), proveedorId: String(proveedorData.id),
       proveedor: proveedorData.nombre, fecha: form.fecha, vencimiento: form.vencimiento, totalCents, pagos: [] };
     setFacturas(prev => [invoice, ...prev]);
+    setEnfocadaId(invoice.id);
     close(); setForm(initialForm());
   }
 
   function addPayment(event) {
     event.preventDefault();
+    if (!puedeRegistrarAbonos) return;
     if (!selected) return;
     const current = withBalance.find(f => f.id === selected);
     if (!current) return;
@@ -94,22 +101,25 @@ export default function CuentasPorPagarPage() {
       ...f, pagos: [...f.pagos, { id: newFrontBId('abono'), montoCents, fecha: payment.fecha, metodo: payment.metodo }],
     } : f));
     close(); setPayment({ monto: '', fecha: localDate(), metodo: 'Efectivo' });
-    setExpanded(selected);
+    setEnfocadaId(selected);
   }
 
   return (
-    <section className="cpp-page">
+    <div className="frontb-workspace">
+      <GestionNav />
+      <section className="cpp-page">
       <header className="cpp-head">
-        <div><h1>Cuentas por pagar</h1><p>Facturas a crédito, vencimientos y abonos a proveedores.</p></div>
+        <div><h1>Cuentas por pagar</h1></div>
+        {puedeCrear && <button type="button" className="cpp-primary" onClick={() => { setError(''); setForm(initialForm()); setSelected(null); setShowForm(true); }}>+ Registrar factura</button>}
       </header>
-      <FrontBNav />
       <div className="cpp-stats">
         <article><span>Saldo pendiente</span><strong>{formatMoney(totalPendiente)}</strong></article>
         <article><span>Facturas por pagar</span><strong>{pendientes}</strong></article>
         <article><span>Facturas vencidas</span><strong>{vencidas}</strong></article>
       </div>
+      <div className="frontb-split frontb-split--payables">
       <section className="cpp-panel">
-        <div className="frontb-panel-actions"><h2>Facturas a crédito</h2><button type="button" className="cpp-primary" onClick={() => { setError(''); setForm(initialForm()); setSelected(null); setShowForm(true); }}>+ Registrar factura</button></div>
+        <div className="frontb-panel-actions"><div><h2>Facturas a crédito</h2></div></div>
         <div className="cpp-filters">
           <input aria-label="Buscar facturas" placeholder="Buscar factura o proveedor..." value={query} onChange={(e) => setQuery(e.target.value)} />
           <select aria-label="Filtrar estado" value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -118,24 +128,31 @@ export default function CuentasPorPagarPage() {
         </div>
         <div className="cpp-table-scroll"><table>
           <thead><tr><th>FACTURA</th><th>PROVEEDOR</th><th>COMPRA</th><th>VENCE</th><th>TOTAL</th><th>SALDO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
-          <tbody>{visible.length === 0 ? <tr><td colSpan={8} className="cpp-empty">No hay facturas con esos criterios.</td></tr> : visible.map((f) => <tr key={f.id}>
-            <td>{f.factura}</td><td>{displayProveedor(f)}</td><td>{f.fecha}</td><td>{f.vencimiento}</td>
+          <tbody>{visible.length === 0 ? <tr><td colSpan={8} className="cpp-empty">No hay facturas con esos criterios.</td></tr> : visible.map((f) => <tr key={f.id} className={facturaEnfocada?.id === f.id ? 'frontb-row-selected' : ''}>
+            <td><strong>{f.factura}</strong></td><td>{displayProveedor(f)}</td><td>{f.fecha}</td><td>{f.vencimiento}</td>
             <td>{formatMoney(f.totalCents)}</td><td>{formatMoney(f.saldoCents)}</td>
             <td><span className={`cpp-status cpp-${f.estado.toLowerCase()}`}>{f.estado}</span></td>
             <td className="cpp-row-actions">
-              <button type="button" disabled={f.saldoCents <= 0} onClick={() => { setSelected(f.id); setError(''); }}>Registrar abono</button>
-              <button type="button" aria-expanded={expanded === f.id} onClick={() => setExpanded(old => old === f.id ? null : f.id)}>{expanded === f.id ? 'Ocultar abonos' : `Ver abonos (${f.pagos.length})`}</button>
+              <button type="button" aria-label={`Ver detalle de la factura ${f.factura}`} aria-pressed={facturaEnfocada?.id === f.id} onClick={() => setEnfocadaId(f.id)}>Ver</button>
             </td>
           </tr>)}
-          {visible.filter(f => expanded === f.id).map(f => <tr key={`${f.id}-pagos`}><td colSpan={8}>
-            <div className="cpp-history"><strong>Historial de abonos de {f.factura}</strong>
-              {f.pagos.length ? <ul>{f.pagos.map(p => <li key={p.id}>{p.fecha} · {p.metodo} · {formatMoney(p.montoCents)}</li>)}</ul> : <p>Esta factura todavía no tiene abonos.</p>}
-            </div>
-          </td></tr>)}
           </tbody>
         </table></div>
       </section>
-      <p className="cpp-helper">Las facturas manuales se guardan solo en este navegador. Las compras a crédito del sistema todavía necesitan integración contable de Back C.</p>
+      <aside className="cpp-panel frontb-detail-panel">
+        <span className="frontb-detail-kicker">DETALLE DE FACTURA</span>
+        {facturaEnfocada ? <>
+          <h2>{facturaEnfocada.factura}</h2>
+          <p className="frontb-section-note">{displayProveedor(facturaEnfocada)} · Vence {facturaEnfocada.vencimiento}</p>
+          <span className={`cpp-status cpp-${facturaEnfocada.estado.toLowerCase()}`}>{facturaEnfocada.estado}</span>
+          <div className="frontb-detail-highlight frontb-detail-highlight--money"><small>SALDO POR PAGAR</small><strong>{formatMoney(facturaEnfocada.saldoCents)}</strong><small>De un total de {formatMoney(facturaEnfocada.totalCents)}</small></div>
+          <h3>Historial de abonos</h3>
+          <ul className="frontb-detail-list">{facturaEnfocada.pagos.length ? facturaEnfocada.pagos.map(p => <li key={p.id}><span>{p.fecha}<small>{p.metodo}</small></span><strong>{formatMoney(p.montoCents)}</strong></li>) : <li>Todavía no hay abonos registrados.</li>}</ul>
+          {puedeRegistrarAbonos && <button type="button" className="cpp-primary frontb-detail-action" disabled={facturaEnfocada.saldoCents <= 0} onClick={() => { setSelected(facturaEnfocada.id); setError(''); }}>Registrar abono</button>}
+        </> : <p className="frontb-empty-side">Seleccioná una factura para ver su detalle.</p>}
+      </aside>
+      </div>
+      
       {creditosEnCompras.length > 0 && <div className="cpp-panel cpp-preview">
         <h2>Créditos de compras (vista previa)</h2>
         <p>Estas compras recibidas a crédito aún no son cuentas por pagar contabilizadas. No se incluyen en el saldo anterior.</p>
@@ -167,6 +184,7 @@ export default function CuentasPorPagarPage() {
           </form>
         </section>
       </div>}
-    </section>
+      </section>
+    </div>
   );
 }

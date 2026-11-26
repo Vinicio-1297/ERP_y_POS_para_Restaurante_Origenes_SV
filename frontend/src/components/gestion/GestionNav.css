@@ -1,0 +1,10 @@
+.frontb-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 22px; }
+.frontb-nav__link { display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #d7b483; border-radius: 10px; padding: 10px 16px;
+  background: #fff2d5; color: #75432f; font-size: 14px;
+  font-weight: 650; text-decoration: none; transition: background 120ms ease; }
+.frontb-nav__link:hover { background: #f7e1b7; color: #75432f; }
+.frontb-nav__link--active, .frontb-nav__link--active:hover {
+  background: #a45038; border-color: #a45038; color: #fff; }
+.frontb-nav__link:focus-visible { outline: 3px solid #65402f; outline-offset: 2px; }
+@media (max-width: 600px) { .frontb-nav__link { flex: 1 1 auto; padding: 10px 12px; } }

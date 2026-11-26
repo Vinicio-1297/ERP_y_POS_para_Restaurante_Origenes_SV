@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import useFrontBModal from '../hooks/useFrontBModal.js';
-import { proveedoresService } from '../services/frontbRepos.js';
-import { newFrontBId } from '../utils/frontbUtils.js';
-import FrontBNav from '../components/frontb/FrontBNav.jsx';
+import useGestionModal from '../hooks/useGestionModal.js';
+import { proveedoresService } from '../services/gestionRepository.js';
+import { newFrontBId } from '../utils/gestionUtils.js';
+import GestionNav from '../components/gestion/GestionNav.jsx';
+import { canCreate, canEdit, canManage, MODULES } from '../utils/permissions.js';
 import '../styles/proveedores-feature.css';
 
 const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '', diasCredito: '0', estado: 'Activo' });
@@ -29,17 +30,21 @@ function validar(form, proveedores, editando) {
 }
 
 export default function ProveedoresPage() {
+  const puedeCrear = canCreate(MODULES.PROVEEDORES);
+  const puedeEditar = canEdit();
+  const puedeCambiarEstado = canManage();
   const [proveedores, setProveedores] = useState(proveedoresService.list);
   const [buscar, setBuscar] = useState('');
+  const [enfocadoId, setEnfocadoId] = useState(null);
   const [filtro, setFiltro] = useState('Todos');
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(VACIO);
   const [error, setError] = useState('');
 
-  useEffect(() => { proveedoresService.save(proveedores); }, [proveedores]);
+  useEffect(() => { if (puedeCrear || puedeEditar) proveedoresService.save(proveedores); }, [proveedores, puedeCrear, puedeEditar]);
   const close = () => { setModal(false); setError(''); };
-  const dialogRef = useFrontBModal(modal, close);
+  const dialogRef = useGestionModal(modal, close);
 
   const lista = useMemo(() => proveedores.filter(p => {
     const coincideEstado = filtro === 'Todos' || p.estado === filtro;
@@ -50,14 +55,17 @@ export default function ProveedoresPage() {
   const activos = proveedores.filter(p => p.estado === 'Activo').length;
   const inactivos = proveedores.length - activos;
   const conCredito = proveedores.filter(p => p.estado === 'Activo' && Number(p.diasCredito) > 0).length;
+  const proveedorEnfocado = lista.find(p => String(p.id) === String(enfocadoId)) || lista[0] || null;
 
   function abrir(p = null) {
+    if (p ? !puedeEditar : !puedeCrear) return;
     setEditando(p?.id ?? null);
     setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: telefonoNacional(p.telefono), correo: p.correo || '', direccion: p.direccion || '', diasCredito: String(p.diasCredito ?? 0), estado: p.estado } : VACIO());
     setError(''); setModal(true);
   }
   function guardar(e) {
     e.preventDefault();
+    if (!(editando ? puedeEditar : puedeCrear)) return;
     if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) return;
     const mensaje = validar(form, proveedores, editando);
     if (mensaje) { setError(mensaje); return; }
@@ -71,32 +79,52 @@ export default function ProveedoresPage() {
     setModal(false);
   }
   function cambiarEstado(p) {
+    if (!puedeCambiarEstado) return;
     const nuevo = p.estado === 'Activo' ? 'Inactivo' : 'Activo';
     if (!window.confirm(`¿Marcar a ${p.nombre} como ${nuevo.toLowerCase()}?`)) return;
     setProveedores(prev => prev.map(item => item.id === p.id ? { ...item, estado: nuevo } : item));
   }
   return (
-    <section className="prv-page">
-      <div className="prv-header">
-        <div><h1>Proveedores</h1><p>Contactos, condiciones de crédito y estado de los proveedores.</p></div>
-      </div>
-      <FrontBNav />
+    <div className="frontb-workspace">
+      <GestionNav />
+      <section className="prv-page">
+      <header className="prv-header">
+        <div><h1>Proveedores</h1></div>
+        {puedeCrear && <button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button>}
+      </header>
       <div className="prv-stats">
         <article><span>Registrados</span><strong>{proveedores.length}</strong></article>
         <article><span>Activos</span><strong>{activos}</strong></article>
         <article><span>Inactivos</span><strong>{inactivos}</strong></article>
         <article><span>Con crédito</span><strong>{conCredito}</strong></article>
       </div>
+      <div className="frontb-split frontb-split--providers">
       <div className="prv-panel">
-        <div className="prv-panel-head"><h2>Directorio de proveedores</h2><button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button></div>
+        <div className="prv-panel-head"><div><h2>Directorio de proveedores</h2></div></div>
         <div className="prv-filters">
           <input type="search" aria-label="Buscar proveedores" placeholder="Buscar nombre, contacto, NIT o teléfono..." value={buscar} onChange={e => setBuscar(e.target.value)} />
           <select value={filtro} onChange={e => setFiltro(e.target.value)} aria-label="Filtrar por estado"><option>Todos</option><option>Activo</option><option>Inactivo</option></select>
         </div>
         <div className="prv-table-wrap"><table><thead><tr><th>PROVEEDOR</th><th>CONTACTO</th><th>TELÉFONO</th><th>CRÉDITO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
           <tbody>{lista.length === 0 ? <tr><td className="prv-empty" colSpan={6}>{proveedores.length ? 'No se encontraron proveedores con esos filtros.' : 'Todavía no hay proveedores registrados.'}</td></tr> : lista.map(p => (
-            <tr key={p.id}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td>{p.diasCredito ? `${p.diasCredito} días` : 'Contado'}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" onClick={() => abrir(p)}>Editar</button><button type="button" onClick={() => cambiarEstado(p)}>{p.estado === 'Activo' ? 'Desactivar' : 'Activar'}</button></div></td></tr>
+            <tr key={p.id} className={proveedorEnfocado?.id === p.id ? 'frontb-row-selected' : ''}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td>{p.diasCredito ? `${p.diasCredito} días` : 'Contado'}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" className="frontb-row-view" aria-label={`Ver ficha de ${p.nombre}`} aria-pressed={proveedorEnfocado?.id === p.id} onClick={() => setEnfocadoId(p.id)}>Ver</button>{puedeEditar && <button type="button" onClick={() => abrir(p)}>Editar</button>}{puedeCambiarEstado && <button type="button" onClick={() => cambiarEstado(p)}>{p.estado === 'Activo' ? 'Desactivar' : 'Activar'}</button>}</div></td></tr>
           ))}</tbody></table></div>
+      </div>
+      <aside className="prv-panel frontb-detail-panel">
+        <span className="frontb-detail-kicker">FICHA DEL PROVEEDOR</span>
+        {proveedorEnfocado ? <>
+          <div className="frontb-identity"><span className="frontb-identity__avatar">{proveedorEnfocado.nombre.charAt(0).toUpperCase()}</span><div><h2>{proveedorEnfocado.nombre}</h2><span className={`prv-status ${proveedorEnfocado.estado === 'Activo' ? 'ok' : 'off'}`}>{proveedorEnfocado.estado}</span></div></div>
+          <dl className="frontb-details">
+            <div><dt>Persona de contacto</dt><dd>{proveedorEnfocado.contacto}</dd></div>
+            <div><dt>Teléfono</dt><dd>{proveedorEnfocado.telefono}</dd></div>
+            <div><dt>Correo</dt><dd>{proveedorEnfocado.correo || 'No registrado'}</dd></div>
+            <div><dt>NIT</dt><dd>{proveedorEnfocado.nit || 'No registrado'}</dd></div>
+            <div><dt>Crédito</dt><dd>{proveedorEnfocado.diasCredito ? `${proveedorEnfocado.diasCredito} días` : 'Contado'}</dd></div>
+            <div><dt>Dirección</dt><dd>{proveedorEnfocado.direccion || 'No registrada'}</dd></div>
+          </dl>
+          {puedeEditar && <button type="button" className="prv-primary frontb-detail-action" onClick={() => abrir(proveedorEnfocado)}>Editar proveedor</button>}
+        </> : <p className="frontb-empty-side">Seleccioná un proveedor para ver su información.</p>}
+      </aside>
       </div>
       {modal && <div className="prv-overlay" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
         <div className="prv-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="prv-dialog-title">
@@ -117,6 +145,7 @@ export default function ProveedoresPage() {
           </form>
         </div>
       </div>}
-    </section>
+      </section>
+    </div>
   );
 }

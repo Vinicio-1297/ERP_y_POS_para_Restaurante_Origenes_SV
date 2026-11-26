@@ -1,0 +1,805 @@
+/* Front B — misma estructura de contenido aprobada, dentro del AppLayout de Vinicio.
+   Únicamente se modifican estilos de Front B. Nada oculta ni reemplaza la topbar
+   o el menú lateral de la app, ni cambia las funciones de los módulos. */
+
+/* El contenedor del POS ya tiene fondo amarillo, sidebar y topbar propios. */
+.app-shell:has(.frontb-workspace) .app-content {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.frontb-workspace {
+  --frontb-bg: var(--c-panel, #f4e07f);
+  --frontb-ink: #382920;
+  --frontb-muted: #856c55;
+  --frontb-brown: var(--c-brand, #a9503a);
+  --frontb-brown-dark: var(--c-brand-dark, #8e3f2c);
+  --frontb-border: #e7ceaa;
+  --frontb-card: #fff7e9;
+  --frontb-soft: var(--c-cream, #fde6bd);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  padding: 20px clamp(16px, 2.5vw, 34px) 55px;
+  margin: 0;
+  background: transparent;
+  color: var(--frontb-ink);
+  font: 14px/1.48 Inter, 'Segoe UI', Arial, sans-serif;
+}
+.frontb-workspace *, .frontb-workspace *::before, .frontb-workspace *::after { box-sizing: border-box; }
+.frontb-workspace > :is(.inv-page,.rec-page,.cmp-page,.prv-page,.cpp-page) {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--frontb-ink);
+  font: inherit;
+}
+/* Navegación SOLO entre submódulos; no se crea otra barra lateral. */
+.frontb-workspace > .frontb-nav {
+  display: flex;
+  position: static;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 7px;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  margin: 0 0 18px;
+  border: 0;
+  background: transparent;
+}
+.frontb-workspace .frontb-nav__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  min-height: 35px;
+  border: 1px solid #d7b483;
+  border-radius: 9px;
+  background: #fde6bd;
+  color: #75432f;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.frontb-workspace .frontb-nav__link:hover {background: #f6d69e;color: #75432f;}
+.frontb-workspace .frontb-nav__link--active,
+.frontb-workspace .frontb-nav__link--active:hover {
+  background: var(--frontb-brown);
+  border-color: var(--frontb-brown);
+  color: #fff;
+}
+
+/* Distribución interna: tarjetas, lista/tabla y panel lateral. */
+.frontb-eyebrow { display:block; color:#876b53; font-size:10px; letter-spacing:.12em; font-weight:750; margin-bottom:13px; }
+.frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  flex-wrap:wrap;
+  padding: 0 0 26px;
+  border-bottom: 1px solid var(--frontb-border);
+  background: transparent;
+}
+.frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) h1 {
+  color: var(--frontb-ink);
+  margin:0;
+  font-size: clamp(28px,2.7vw,39px);
+  line-height:1.15;
+  letter-spacing:-.035em;
+  font-weight: 800;
+}
+.frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) p {
+  margin:8px 0 0;
+  color:var(--frontb-muted);
+  font-size:13px;
+}
+.frontb-workspace :is(.inv-primary,.rec-primary,.cmp-primary,.prv-primary,.cpp-primary) {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border:1px solid transparent;
+  border-radius:9px;
+  padding:11px 17px;
+  min-height:41px;
+  background:var(--frontb-brown);
+  color:#fff;
+  font:inherit;
+  font-size:12.5px;
+  font-weight:700;
+  cursor:pointer;
+  text-decoration:none;
+  box-shadow:0 2px 5px rgba(104,58,43,.10);
+}
+.frontb-workspace :is(.inv-primary,.rec-primary,.cmp-primary,.prv-primary,.cpp-primary):hover:not(:disabled) { background:var(--frontb-brown-dark); color:#fff; }
+.frontb-workspace button:disabled { opacity: .55; cursor:not-allowed; }
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:15px;
+  margin:23px 0 22px;
+}
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:0;
+  min-height:105px;
+  padding:20px;
+  background:#fff9ef;
+  border:1px solid var(--frontb-border);
+  border-radius:13px;
+  box-shadow: 0 4px 15px rgba(40,31,23,.025);
+}
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article span { color:var(--frontb-muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:750; }
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article strong { color:var(--frontb-ink);font-size:clamp(25px,2.8vw,34px);font-weight:800;line-height:1.12; }
+.frontb-workspace .inv-stats article:nth-child(2) strong, .frontb-workspace .cpp-stats article:nth-child(3) strong {color:#c08427;}
+.frontb-workspace .inv-stats article:nth-child(3) strong {color:#b95d48;}
+.frontb-workspace .cpp-stats article:first-child strong {color:var(--frontb-brown);}
+.frontb-workspace .frontb-kpi-label { font-size:20px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.frontb-workspace .frontb-toolbar { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:15px; }
+.frontb-workspace .frontb-toolbar label { display:flex;gap:12px;align-items:center;font-size:12px;font-weight:750;color:var(--frontb-muted); }
+.frontb-workspace .frontb-toolbar :is(.inv-error,[role="status"]) { margin:0; }
+.frontb-workspace :is(.inv-panel,.rec-panel,.cmp-panel,.prv-panel,.cpp-panel) {
+  min-width:0;
+  padding:clamp(18px,2.05vw,27px);
+  border:1px solid var(--frontb-border);
+  background:var(--frontb-card);
+  border-radius:14px;
+  color:var(--frontb-ink);
+  box-shadow:0 5px 18px rgba(51,38,25,.028);
+}
+.frontb-workspace :is(.inv-panel,.rec-panel,.cmp-panel,.prv-panel,.cpp-panel) h2 {margin:0;color:var(--frontb-ink);font-size:18px;line-height:1.25;letter-spacing:-.02em;font-weight:800;}
+.frontb-workspace .frontb-section-note {font-size:11.5px;color:var(--frontb-muted);margin:5px 0 0;line-height:1.4;}
+.frontb-workspace .frontb-panel-actions {display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 20px;flex-wrap:wrap;}
+.frontb-workspace .frontb-split {display:grid;grid-template-columns:minmax(0,1fr) minmax(255px,29%);gap:17px;align-items:start;}
+.frontb-workspace .frontb-split--inventory {grid-template-columns:minmax(0,1fr) minmax(255px,28%);}
+.frontb-workspace .frontb-split--recipes {grid-template-columns:minmax(0,1fr) minmax(285px,36%);}
+.frontb-workspace .frontb-split--purchases,.frontb-workspace .frontb-split--providers,.frontb-workspace .frontb-split--payables {grid-template-columns:minmax(0,1fr) minmax(265px,30%);}
+.frontb-workspace :is(.inv-filters,.cmp-filters,.prv-filters,.cpp-filters) {display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 17px;}
+.frontb-workspace .rec-panel-head {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:17px;}
+.frontb-workspace .rec-panel-head input {min-width:180px;flex:0 1 230px;}
+.frontb-workspace :is(.inv-filters,.cmp-filters,.prv-filters,.cpp-filters) > input {flex:1 1 180px;min-width:150px;}
+.frontb-workspace :is(.inv-filters,.cmp-filters,.prv-filters,.cpp-filters) > select,
+.frontb-workspace .inv-filters label {max-width:185px;}
+.frontb-workspace :is(.inv-page,.rec-page,.cmp-page,.prv-page,.cpp-page) :is(input,select,textarea) {
+  min-height:39px;
+  border:1px solid #d7b483;
+  border-radius:8px;
+  background:#fff9ef;
+  color:#533628;
+  font:inherit;
+  font-size:12.5px;
+  padding:9px 12px;
+  max-width:100%;
+}
+.frontb-workspace :is(.inv-page,.rec-page,.cmp-page,.prv-page,.cpp-page) :is(input,select,textarea)::placeholder {color:#a0968b;}
+.frontb-workspace :is(input,select,textarea,button,a):focus-visible {outline:3px solid rgba(153,81,59,.26);outline-offset:2px;}
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.cmp-table-wrap,.prv-table-wrap,.cpp-table-scroll) {
+  width:100%;max-width:100%;min-width:0;overflow-x:auto;border:1px solid #ead4ae;border-radius:9px;background:#fff9ef;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) {
+  width:100%;min-width:0;border-collapse:collapse;white-space:nowrap;font-size:11px;
+}
+.frontb-workspace .inv-table { min-width: 735px; }
+.frontb-workspace .rec-table-wrap table { min-width: 620px; }
+.frontb-workspace .cmp-table-wrap table { min-width: 680px; }
+.frontb-workspace .prv-table-wrap table { min-width: 650px; }
+.frontb-workspace .cpp-table-scroll table { min-width: 770px; }
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) th {
+  background:#f6e7cf;color:#80654e;text-transform:uppercase;letter-spacing:.065em;font-size:9px;font-weight:800;padding:14px 12px;text-align:left;border-bottom:1px solid #e4cfaa;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) td {
+  padding:14px 12px;color:#604b38;border-bottom:1px solid #ead8bc;background:#fff9ef;vertical-align:middle;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) tbody tr:nth-child(even) td {background:#fff9ef;}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) tbody tr:hover td,
+.frontb-workspace tr.frontb-row-selected td {background:#f9e7ce!important;}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) tbody tr:last-child td {border-bottom:0;}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) td strong {color:#382920;font-weight:750;}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) td small {display:block;font-size:9.5px;margin-top:4px;color:#8b6e57;}
+.frontb-workspace .frontb-table-select {padding:0;border:0;background:transparent;color:#3d332b;font:inherit;font-weight:800;cursor:pointer;text-align:left;text-decoration:none;}
+.frontb-workspace .frontb-table-select:hover {color:var(--frontb-brown);text-decoration:underline;}
+.frontb-workspace :is(.inv-status,.rec-status,.cmp-status,.prv-status,.cpp-status) {display:inline-block;white-space:nowrap;padding:6px 10px;border-radius:999px;font-size:10px;font-weight:750;line-height:1.1;box-shadow:none;}
+.frontb-workspace :is(.inv-normal,.rec-status.ok,.cmp-status.ok,.prv-status.ok,.cpp-pagada) {background:#e5f4e9;color:#44765a;}
+.frontb-workspace :is(.inv-stock-bajo,.rec-status.pending,.cmp-status.draft,.cpp-pendiente) {background:#ffebc0;color:#a97b28;}
+.frontb-workspace :is(.inv-agotado,.prv-status.off,.cpp-vencida) {background:#fce4d9;color:#b85c49;}
+.frontb-workspace :is(.inv-actions,.cmp-actions,.prv-actions,.cpp-row-actions) {display:flex;align-items:center;gap:7px;flex-wrap:nowrap;width:max-content;}
+.frontb-workspace :is(.inv-actions,.cmp-actions,.prv-actions,.cpp-row-actions) button,
+.frontb-workspace :is(.rec-link,.inv-secondary,.rec-secondary,.cmp-secondary,.cmp-small,.prv-secondary) {border:1px solid #dbb78e;background:#fff9ef;border-radius:7px;color:#a9503a;font-size:11px;font-weight:750;padding:7px 9px;min-height:31px;white-space:nowrap;text-decoration:none;cursor:pointer;}
+.frontb-workspace :is(.inv-actions,.cmp-actions,.prv-actions,.cpp-row-actions) button:hover,
+.frontb-workspace :is(.rec-link,.inv-secondary,.rec-secondary,.cmp-secondary,.cmp-small,.prv-secondary):hover {background:#f9ead3;}
+.frontb-workspace :is(.rec-danger,.inv-actions button:last-child:not(:first-child)) {color:#b95b4c;}
+.frontb-workspace .frontb-detail-panel {position:relative;display:block;min-width:0;}
+.frontb-workspace .frontb-detail-kicker {display:block;color:#8d725e;font-size:9px;font-weight:800;letter-spacing:.13em;margin-bottom:15px;}
+.frontb-workspace .frontb-detail-panel h2 {font-size:19px;line-height:1.25;margin-bottom:5px;overflow-wrap:anywhere;}
+.frontb-workspace .frontb-detail-panel h3 {font-size:11px;letter-spacing:.065em;text-transform:uppercase;color:#887a6c;margin:22px 0 11px;font-weight:800;}
+.frontb-workspace .frontb-detail-panel > .frontb-section-note {margin-bottom:15px;}
+.frontb-workspace .frontb-detail-highlight {display:flex;flex-direction:column;gap:4px;background:#ffefd8;border-radius:10px;padding:16px;margin-top:18px;}
+.frontb-workspace .frontb-detail-highlight small {color:#9c7763;font-size:10px;font-weight:700;}
+.frontb-workspace .frontb-detail-highlight strong {color:#a9503a;font-size:23px;line-height:1.15;}
+.frontb-workspace .frontb-detail-highlight--money {background:#ffeed7;}
+.frontb-workspace .frontb-detail-highlight--money strong {font-size:26px;}
+.frontb-workspace .frontb-detail-list {list-style:none;padding:0;margin:7px 0 18px;display:flex;flex-direction:column;}
+.frontb-workspace .frontb-detail-list li {display:flex;align-items:center;justify-content:space-between;gap:13px;min-height:44px;border-bottom:1px solid #e9d5b7;font-size:11px;color:#62564c;}
+.frontb-workspace .frontb-detail-list li > strong {font-size:11px;white-space:nowrap;color:#55473e;}
+.frontb-workspace .frontb-detail-list li small {display:block;color:#9a8c7f;margin-top:2px;font-size:10px;}
+.frontb-workspace .frontb-detail-action {display:flex!important;width:100%;margin-top:23px;}
+.frontb-workspace .frontb-detail-total {padding:18px 0 0;margin-top:16px;border-top:1px solid #ede4dc;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.frontb-workspace .frontb-detail-total span {font-size:11px;color:#8e8276;}
+.frontb-workspace .frontb-detail-total strong {font-size:23px;color:var(--frontb-brown);}
+.frontb-workspace .frontb-empty-side {margin:12px 0 0;color:#8e8175;font-size:12px;line-height:1.6;}
+.frontb-workspace .frontb-identity {display:flex;align-items:center;gap:12px;}
+.frontb-workspace .frontb-identity__avatar {display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:#f7dfc2;color:#a65b40;font-weight:800;font-size:19px;flex:0 0 auto;}
+.frontb-workspace .frontb-details {margin:22px 0 0;display:flex;flex-direction:column;gap:16px;}
+.frontb-workspace .frontb-details div {min-width:0;}
+.frontb-workspace .frontb-details dt {text-transform:uppercase;letter-spacing:.07em;color:#9a8e84;font-size:9px;font-weight:800;margin-bottom:5px;}
+.frontb-workspace .frontb-details dd {color:#483d36;font-size:12px;font-weight:650;margin:0;overflow-wrap:anywhere;}
+.frontb-workspace .frontb-alert-list {display:flex;flex-direction:column;gap:12px;}
+.frontb-workspace .frontb-alert-card {padding:14px;border:1px solid #ead4b3;background:#fff3e1;border-radius:11px;min-width:0;}
+.frontb-workspace .frontb-alert-card__top {display:flex;justify-content:space-between;align-items:flex-start;gap:7px;flex-wrap:wrap;}
+.frontb-workspace .frontb-alert-card__top strong {font-size:12px;color:#453930;overflow-wrap:anywhere;}
+.frontb-workspace .frontb-alert-card p {font-size:10.5px;color:#8e8275;margin:9px 0 2px;}
+.frontb-workspace .frontb-alert-card p strong {color:#71594c;}
+.frontb-workspace .frontb-alert-card button {padding:3px 0;margin-top:9px;background:transparent;border:0;color:#a9503a;text-decoration:underline;font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
+.frontb-workspace .inv-alert-count {background:#f7e0cf;color:#a4533b;padding:6px 10px;border-radius:999px;font-size:12px;}
+.frontb-workspace .inv-alert-panel {margin:0;}
+.frontb-workspace .frontb-row-selected .frontb-table-select {color:#8e3f2c;}
+.frontb-workspace :is(.inv-overlay,.rec-overlay,.cmp-overlay,.prv-overlay,.cpp-overlay) {position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:20px;background:rgba(33,29,25,.55);backdrop-filter:blur(2px);}
+.frontb-workspace :is(.inv-dialog,.rec-dialog,.cmp-dialog,.prv-dialog,.cpp-dialog) {width:min(96vw,680px);max-height:92vh;overflow:auto;border:1px solid #e2c59b;border-radius:17px;background:#fff9ef;box-shadow:0 28px 75px rgba(23,17,12,.25);color:var(--frontb-ink);}
+.frontb-workspace :is(.inv-dialog,.rec-dialog,.cmp-dialog,.prv-dialog,.cpp-dialog) :is(input,select,textarea) {background:#fff9ef;}
+.frontb-workspace :is(.inv-dialog-head,.rec-dialog-head,.cmp-dialog-head,.prv-dialog-head) h2,
+.frontb-workspace .cpp-dialog h2 {color:#553727;}
+.frontb-workspace :is(.inv-error,.rec-error,.cmp-error,.prv-error,.cpp-error) {color:#aa3f35;font-size:12px;}
+.frontb-workspace :is(.rec-notice,.cmp-helper,.cpp-helper) {color:#75695d;font-size:12px;line-height:1.6;}
+.frontb-workspace .cpp-preview {margin-top:20px;}
+.frontb-workspace :is(.rec-stats,.cpp-stats) {grid-template-columns: repeat(3,minmax(0,1fr));}
+.frontb-workspace .rec-panel .rec-table-wrap {overflow-x:auto;}
+
+/* Recetas y cuentas por pagar tienen tres indicadores. Compras y
+   proveedores tienen cuatro; se conserva una fila uniforme para cada módulo. */
+.frontb-workspace :is(.rec-stats,.cpp-stats) {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+}
+.frontb-workspace :is(.cmp-stats,.prv-stats) {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+}
+/* Dejar un borde visible en los paneles sobre el amarillo de Vinicio. */
+.frontb-workspace :is(.inv-panel,.rec-panel,.cmp-panel,.prv-panel,.cpp-panel) {
+  background: var(--frontb-card);
+  border-color: var(--frontb-border);
+}
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article {
+  background: #fff9ef;
+  border-color: var(--frontb-border);
+}
+.frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article strong {
+  color: var(--frontb-brown);
+}
+.frontb-workspace .inv-stats article:nth-child(2) strong,
+.frontb-workspace .cpp-stats article:nth-child(3) strong { color: #b27c19; }
+.frontb-workspace .inv-stats article:nth-child(3) strong { color: #bb5544; }
+/* Mantener el panel de detalle junto a la tabla en escritorio. */
+.frontb-workspace .frontb-split { grid-template-columns: minmax(0,1fr) minmax(220px,28%); }
+.frontb-workspace .frontb-split--recipes { grid-template-columns: minmax(0,1fr) minmax(265px,36%); }
+.frontb-workspace :is(.frontb-split--purchases,.frontb-split--providers,.frontb-split--payables) {
+  grid-template-columns: minmax(0,1fr) minmax(245px,30%);
+}
+/* Tablas con desplazamiento propio si hacen falta más columnas. */
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.cmp-table-wrap,.prv-table-wrap,.cpp-table-scroll) {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) th {
+  background: #f4e3c6;
+  color: #70553c;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) td {
+  background: #fff9ef;
+}
+.frontb-workspace :is(.inv-table,.rec-table-wrap table,.cmp-table-wrap table,.prv-table-wrap table,.cpp-table-scroll table) tbody tr:hover td,
+.frontb-workspace tr.frontb-row-selected td { background: #fce9cf!important; }
+.frontb-workspace .frontb-detail-highlight { background: #ffefd8; }
+.frontb-workspace .frontb-alert-card { background: #fff1dc; }
+.frontb-workspace .frontb-eyebrow { color: #927761; }
+.frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) h1 {
+  color: var(--frontb-brown);
+}
+@media(max-width:1040px) {
+  .frontb-workspace .frontb-split,
+  .frontb-workspace .frontb-split--inventory,
+  .frontb-workspace .frontb-split--recipes,
+  .frontb-workspace :is(.frontb-split--purchases,.frontb-split--providers,.frontb-split--payables) {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:690px) {
+  .frontb-workspace {padding:14px 12px 35px;}
+  .frontb-workspace > .frontb-nav {margin-bottom:18px;}
+  .frontb-workspace .frontb-nav__link {flex:1 1 auto;}
+  .frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) {
+    align-items:flex-start;
+    flex-direction:column;
+    gap:15px;
+  }
+  .frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) h1 { font-size:27px; }
+  .frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article {
+    padding:14px;min-height:94px;
+  }
+  .frontb-workspace :is(.inv-stats,.rec-stats,.cmp-stats,.prv-stats,.cpp-stats) article strong {font-size:24px;}
+  .frontb-workspace .frontb-kpi-label {font-size:16px!important;}
+  .frontb-workspace :is(.inv-panel,.rec-panel,.cmp-panel,.prv-panel,.cpp-panel) {padding:16px;}
+  .frontb-workspace .rec-panel-head input {width:100%;max-width:none;flex:1 1 100%;}
+}
+
+/* Ajuste localizado del 26/11: sin cambios de lógica, JSX ni estilos del layout de Vinicio. */
+
+/* Inventario: alinear buscador con la parte inferior de los selectores,
+   manteniendo sus etiquetas arriba. */
+.frontb-workspace .inv-filters {
+  align-items: flex-end;
+  gap: 12px;
+}
+.frontb-workspace .inv-filters > input,
+.frontb-workspace .inv-filters label select {
+  height: 42px;
+  min-height: 42px;
+}
+.frontb-workspace .inv-filters label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 1 170px;
+  min-width: 130px;
+  gap: 6px;
+  margin: 0;
+}
+
+/* Tablas más legibles: quitar la anchura mínima obligatoria en escritorio y
+   distribuir el espacio disponible entre las columnas. */
+.frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  white-space: normal;
+}
+.frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) :is(th,td) {
+  padding: 12px 7px;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) th {
+  white-space: normal;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) td {
+  white-space: normal;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) :is(td:first-child, td:nth-child(2)) {
+  overflow-wrap: anywhere;
+}
+
+/* Inventario: columnas ajustadas, acciones en dos filas si no hay espacio. */
+.frontb-workspace .inv-table :is(th,td):nth-child(1) {width: 22%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(2) {width: 9%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(3) {width: 12%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(4) {width: 11%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(5) {width: 11%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(6) {width: 14%;}
+.frontb-workspace .inv-table :is(th,td):nth-child(7) {width: 21%;}
+.frontb-workspace .inv-table th:last-child,
+.frontb-workspace .inv-table td:last-child {min-width: 0; white-space: normal;}
+.frontb-workspace .inv-table .inv-actions {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.frontb-workspace .inv-table .inv-actions button {
+  flex: 1 1 68px;
+  min-width: 0;
+  white-space: normal;
+  padding: 6px 7px;
+  line-height: 1.25;
+}
+
+/* Compras: dejar los filtros en una fila independiente del título. */
+.frontb-workspace .cmp-panel-head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 13px;
+}
+.frontb-workspace .cmp-panel-head > .frontb-panel-actions { flex: 0 1 auto; }
+.frontb-workspace .cmp-filters { width: 100%; }
+.frontb-workspace .cmp-filters input { flex: 1 1 220px; min-width: 0; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(1) {width: 13%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(2) {width: 19%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(3) {width: 14%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(4) {width: 15%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(5) {width: 12%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(6) {width: 12%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(7) {width: 15%;}
+
+/* Cuentas por pagar: la clase cpp-row-actions está en un TD.
+   Mostrar ese TD como flex rompía la alineación de las columnas. */
+.frontb-workspace .cpp-table-scroll td.cpp-row-actions {
+  display: table-cell;
+  width: 12%;
+  min-width: 0;
+  white-space: normal;
+}
+.frontb-workspace .cpp-table-scroll td.cpp-row-actions button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 5px;
+  padding: 6px 4px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.25;
+}
+.frontb-workspace .cpp-table-scroll td.cpp-row-actions button:last-child {margin-bottom: 0;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(1) {width: 10%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(2) {width: 14%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(3) {width: 12%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(4) {width: 12%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(5) {width: 15%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(6) {width: 15%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(7) {width: 10%;}
+.frontb-workspace .cpp-table-scroll :is(th,td):nth-child(8) {width: 12%;}
+.frontb-workspace .cpp-table-scroll td[colspan] {width: auto;}
+
+/* En pantallas realmente estrechas se conserva el scroll horizontal antes
+   que hacer ilegibles las columnas, pero ya no es obligatorio en escritorio. */
+@container frontb (max-width: 760px) {
+  .frontb-workspace .inv-table.inv-table { min-width: 680px; }
+  .frontb-workspace .cmp-table-wrap.cmp-table-wrap table { min-width: 735px; }
+  .frontb-workspace .cpp-table-scroll.cpp-table-scroll table { min-width: 840px; }
+}
+
+/* Corrección final de tarjetas de Compras y Proveedores.
+   Alinea cuatro indicadores por fila cuando existe espacio; no modifica
+   navegación, barras de Vinicio, datos ni lógica de Front B. */
+.frontb-workspace > .cmp-page > .cmp-stats,
+.frontb-workspace > .prv-page > .prv-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.frontb-workspace > .cmp-page > .cmp-stats > article,
+.frontb-workspace > .prv-page > .prv-stats > article {
+  min-width: 0;
+}
+
+@media (max-width: 1050px) {
+  .frontb-workspace > .cmp-page > .cmp-stats,
+  .frontb-workspace > .prv-page > .prv-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .frontb-workspace > .cmp-page > .cmp-stats,
+  .frontb-workspace > .prv-page > .prv-stats {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+
+/* 26/11 - Consistencia general: estructura original de dos paneles.
+   Las cinco pantallas conservan la ficha a la derecha en escritorio,
+   sin cambiar navegación, lógica o estilos globales de Vinicio. */
+.frontb-workspace { container: frontb / inline-size; }
+.frontb-workspace .frontb-split > :first-child,
+.frontb-workspace .frontb-split > aside {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* La tabla se desplaza dentro de SU propio panel si hacen falta columnas.
+   Nunca debe empujar el panel de detalle fuera de la pantalla. */
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.cmp-table-wrap,.prv-table-wrap,.cpp-table-scroll) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* Compras: recuperar acciones compactas (no tres botones de ancho completo).
+   Conserva sus funciones, pero evita filas excesivamente altas. */
+.frontb-workspace .cmp-table-wrap .cmp-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
+.frontb-workspace .cmp-table-wrap .cmp-actions button {
+  width: auto;
+  min-width: 0;
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+/* Más espacio para acciones, sin cambiar el orden de la tabla. */
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(1) { width: 11%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(2) { width: 16%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(3) { width: 13%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(4) { width: 14%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(5) { width: 10%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(6) { width: 12%; }
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(7) { width: 24%; }
+.frontb-workspace .cmp-table-wrap table { min-width: 760px; }
+
+/* Proveedores: botones compactos y legibles junto a cada registro. */
+.frontb-workspace .prv-table-wrap .prv-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: auto;
+  min-width: 0;
+}
+.frontb-workspace .prv-table-wrap .prv-actions button {
+  min-height: 27px;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+/* Las cinco pantallas siguen la misma regla, sin excepciones por módulo. */
+@container frontb (min-width: 960px) {
+  .frontb-workspace .frontb-split.frontb-split--inventory,
+  .frontb-workspace .frontb-split.frontb-split--recipes,
+  .frontb-workspace .frontb-split.frontb-split--purchases,
+  .frontb-workspace .frontb-split.frontb-split--providers,
+  .frontb-workspace .frontb-split.frontb-split--payables {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 29%) !important;
+    align-items: start;
+  }
+  .frontb-workspace .frontb-split.frontb-split--recipes {
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 34%) !important;
+  }
+}
+@container frontb (max-width: 959px) {
+  .frontb-workspace .frontb-split.frontb-split--inventory,
+  .frontb-workspace .frontb-split.frontb-split--recipes,
+  .frontb-workspace .frontb-split.frontb-split--purchases,
+  .frontb-workspace .frontb-split.frontb-split--providers,
+  .frontb-workspace .frontb-split.frontb-split--payables {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+
+/* Accion Ver: misma experiencia en las listas con panel de detalle. */
+.frontb-workspace .frontb-row-view {
+  white-space: nowrap;
+  min-width: 38px;
+}
+.frontb-workspace .frontb-row-view[aria-pressed="true"] {
+  background: #f4ddc2;
+  border-color: #c58c6f;
+  color: #8f4535;
+}
+.frontb-workspace .rec-table-wrap td:last-child {
+  min-width: 142px;
+  white-space: normal;
+}
+.frontb-workspace .rec-table-wrap td:last-child .rec-link {
+  margin: 2px;
+}
+
+
+/* Ajuste de acciones — todos los módulos usan botones en una sola fila.
+   La tabla conserva su propio desplazamiento horizontal si hace falta espacio.
+   No se modifican la barra, los colores globales ni el panel derecho de Vinicio. */
+.frontb-workspace .inv-table-wrap .inv-actions,
+.frontb-workspace .cmp-table-wrap .cmp-actions,
+.frontb-workspace .prv-table-wrap .prv-actions {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  white-space: nowrap;
+}
+.frontb-workspace .inv-table-wrap .inv-actions > button,
+.frontb-workspace .cmp-table-wrap .cmp-actions > button,
+.frontb-workspace .prv-table-wrap .prv-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+  min-height: 30px;
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+/* Recetas tiene botones directamente dentro del TD, sin contenedor .rec-actions. */
+.frontb-workspace .rec-table-wrap tbody td:last-child {
+  min-width: 205px;
+  white-space: nowrap;
+}
+.frontb-workspace .rec-table-wrap tbody td:last-child > .rec-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  min-height: 30px;
+  margin: 0 4px 0 0;
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+/* Cuentas por pagar tiene la clase de acciones en el TD: no cambiarlo a flex,
+   porque rompería la alineación entre encabezado y filas. */
+.frontb-workspace .cpp-table-scroll td.cpp-row-actions {
+  display: table-cell;
+  white-space: nowrap;
+  min-width: 0;
+}
+.frontb-workspace .cpp-table-scroll td.cpp-row-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: max-content;
+  min-height: 30px;
+  margin: 0 4px 0 0;
+  padding: 5px 8px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* El ancho interno de cada tabla evita cortar el último botón.
+   Solo el listado se desplaza: la ficha derecha permanece visible. */
+.frontb-workspace .cmp-table-wrap table {
+  min-width: 740px;
+}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(1) {width: 8%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(2) {width: 15%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(3) {width: 12%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(4) {width: 12%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(5) {width: 9%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(6) {width: 10%;}
+.frontb-workspace .cmp-table-wrap :is(th,td):nth-child(7) {width: 34%;}
+.frontb-workspace .prv-table-wrap table {min-width: 740px;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(1) {width: 17%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(2) {width: 18%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(3) {width: 13%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(4) {width: 10%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(5) {width: 12%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(6) {width: 30%;}
+.frontb-workspace .inv-table {min-width: 740px;}
+.frontb-workspace .rec-table-wrap table {min-width: 720px;}
+.frontb-workspace :is(.cmp-table-wrap,.prv-table-wrap,.inv-table-wrap,.rec-table-wrap,.cpp-table-scroll) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+
+/* 26/11 — Las tablas sin datos de factura se ajustan al panel disponible.
+   Se mantiene overflow-x:auto por seguridad: solo aparece si de verdad no cabe
+   la información, por ejemplo en pantallas pequeñas. No se esconden columnas. */
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.frontb-workspace .inv-table-wrap .inv-table,
+.frontb-workspace .rec-table-wrap table,
+.frontb-workspace .prv-table-wrap table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  white-space: normal;
+}
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) :is(th,td) {
+  padding: 11px 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) th {
+  font-size: 9px;
+  line-height: 1.3;
+}
+.frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) td {
+  font-size: 11px;
+  line-height: 1.4;
+}
+/* Conservar acciones en UNA fila, sin estirar las demás columnas. */
+.frontb-workspace .inv-table-wrap .inv-actions,
+.frontb-workspace .prv-table-wrap .prv-actions {
+  gap: 3px;
+}
+.frontb-workspace .inv-table-wrap .inv-actions > button,
+.frontb-workspace .prv-table-wrap .prv-actions > button,
+.frontb-workspace .rec-table-wrap td:last-child > .rec-link {
+  min-height: 29px;
+  padding: 4px 5px;
+  font-size: 9px;
+}
+/* No imponer un ancho de 205px al último TD de Recetas. */
+.frontb-workspace .rec-table-wrap tbody td:last-child {
+  min-width: 0;
+  white-space: nowrap;
+}
+.frontb-workspace .rec-table-wrap tbody td:last-child > .rec-link {margin-right: 3px;}
+/* Repartir ancho por significado, no por mínimos arbitrarios de 650-740px. */
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(1) {width: 19%;}
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(2) {width: 13%;}
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(3) {width: 13%;}
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(4) {width: 10%;}
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(5) {width: 17%;}
+.frontb-workspace .rec-table-wrap :is(th,td):nth-child(6) {width: 28%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(1) {width: 18%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(2) {width: 17%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(3) {width: 13%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(4) {width: 10%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(5) {width: 11%;}
+.frontb-workspace .prv-table-wrap :is(th,td):nth-child(6) {width: 31%;}
+/* Facturas: mantener la barra únicamente cuando las columnas y botones
+   realmente excedan la anchura de la tabla; nunca esconder acciones. */
+.frontb-workspace :is(.cmp-table-wrap,.cpp-table-scroll) {overflow-x: auto;}
+
+/* Por debajo de este ancho conviene desplazar tablas en vez de reducir
+   tanto las acciones que se vuelvan difíciles de utilizar. */
+@container frontb (max-width: 780px) {
+  .frontb-workspace .inv-table-wrap .inv-table {min-width: 675px;}
+  .frontb-workspace .rec-table-wrap table {min-width: 630px;}
+  .frontb-workspace .prv-table-wrap table {min-width: 670px;}
+}
+
+
+/* Corrección puntual: el título FACTURA nunca se divide en FACTUR / A.
+   Se reserva espacio real a esa columna sin quitar el panel lateral ni
+   modificar las acciones. */
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(1) { width: 12%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(2) { width: 14%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(3) { width: 11%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(4) { width: 12%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(5) { width: 9%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(6) { width: 10%; }
+.frontb-workspace .cmp-table-wrap :is(th, td):nth-child(7) { width: 32%; }
+.frontb-workspace .cmp-table-wrap thead th:first-child,
+.frontb-workspace .cpp-table-scroll thead th:first-child {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
