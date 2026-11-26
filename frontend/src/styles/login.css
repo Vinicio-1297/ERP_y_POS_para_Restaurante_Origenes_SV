@@ -242,4 +242,25 @@
     right: 1rem;
   }
 }
- 
+/* mensaje de recuperacion de contrasena */
+.login-support {
+  margin: 12px 0;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.45);
+  border: 1px solid #a34b35;
+  border-radius: 8px;
+  color: #783b2b;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.login-support p {
+  margin: 0 0 8px;
+}
+
+.login-support a {
+  color: #a34b35;
+  font-weight: 600;
+  text-decoration: underline;
+}
