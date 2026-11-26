@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { recetasService, comprasService } from '../services/gestionRepository.js';
 import {
   listarSucursales, listarInventario, crearArticulo, actualizarArticulo,
   desactivarArticulo, actualizarMinimo, ajustarExistencia,
@@ -228,14 +227,6 @@ export default function InventarioPage() {
 
   async function deleteProduct(product) {
     if (!esAdministrador || busy) return;
-    const usada = recetasService.list().filter(r => r.ingredientes?.some(i => String(i.insumoId) === String(product.id)));
-    if (usada.length) {
-      window.alert(`No se puede eliminar «${product.nombre}»: se utiliza en ${usada.length} receta(s).`); return;
-    }
-    const comprado = comprasService.list().some(c => c.lineas?.some(l => String(l.inventarioId) === String(product.id)));
-    if (comprado) {
-      window.alert(`No se puede eliminar «${product.nombre}»: figura en facturas de compra.`); return;
-    }
     if (!window.confirm(`¿Desactivar "${product.nombre}" del inventario?`)) return;
     setBusy(true);
     setPageError('');
