@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useFrontBModal from '../hooks/useFrontBModal.js';
-import { recetasService, comprasService } from '../services/frontbRepos.js';
+import useGestionModal from '../hooks/useGestionModal.js';
+import { recetasService, comprasService } from '../services/gestionRepository.js';
 import {
   listarSucursales, listarInventario, crearArticulo, actualizarArticulo,
   desactivarArticulo, actualizarMinimo, ajustarExistencia,
-} from '../services/frontbApi.js';
-import { dollarsToCents, centsFor, formatMoney, validQuantity, suggestedPurchase } from '../utils/frontbUtils.js';
-import FrontBNav from '../components/frontb/FrontBNav.jsx';
+} from '../services/gestionApi.js';
+import { dollarsToCents, centsFor, formatMoney, validQuantity, suggestedPurchase } from '../utils/gestionUtils.js';
+import GestionNav from '../components/gestion/GestionNav.jsx';
+import { isAdmin, canAccessModule, canCreate, MODULES } from '../utils/permissions.js';
 import '../styles/inventario-feature.css';
 
 const EMPTY_FORM = {
@@ -38,9 +39,9 @@ function validBackendQuantity(input, unidad) {
 export default function InventarioPage() {
   const navigate = useNavigate();
   const [usuario] = useState(readUser);
-  const rol = String(usuario?.rol || usuario?.role || '').toLowerCase().trim();
-  const esAdministrador = rol === 'administrador';
-  const puedeVer = esAdministrador || rol === 'gerente';
+  const esAdministrador = isAdmin();
+  const puedeVer = canAccessModule(MODULES.INVENTARIO);
+  const puedeRegistrarCompra = canCreate(MODULES.COMPRAS);
   const [sucursales, setSucursales] = useState([]);
   const [sucursalId, setSucursalId] = useState('');
   const [products, setProducts] = useState([]);
@@ -105,7 +106,7 @@ export default function InventarioPage() {
     setEditingId(null);
     setForm(EMPTY_FORM);
   };
-  const dialogRef = useFrontBModal(showForm, closeForm);
+  const dialogRef = useGestionModal(showForm, closeForm);
 
   const filtered = useMemo(() => products.filter(product => {
     const query = `${product.nombre} ${product.categoria} ${product.codigo || ''}`.toLowerCase();
@@ -252,10 +253,10 @@ export default function InventarioPage() {
 
   return (
     <div className="frontb-workspace">
-      <FrontBNav />
+      <GestionNav />
       <section className="inv-page">
       <header className="inv-header">
-        <div><span className="frontb-eyebrow">GESTIÓN / FRONT B</span><h1>Inventario</h1><p>Existencias, alertas y ajustes por sucursal</p></div>
+        <div><h1>Inventario</h1></div>
         {esAdministrador && <button type="button" className="inv-primary" disabled={loading || busy || !sucursalId} onClick={() => openForm()}>+ Nuevo artículo</button>}
       </header>
       <div className="frontb-toolbar inv-sync">
@@ -277,7 +278,7 @@ export default function InventarioPage() {
       </div>
       <div className="frontb-split frontb-split--inventory">
       <div className="inv-panel">
-        <div className="frontb-panel-actions"><div><h2>Artículos del inventario</h2><p className="frontb-section-note">Consultá, filtrá o actualizá artículos</p></div></div>
+        <div className="frontb-panel-actions"><div><h2>Artículos del inventario</h2></div></div>
         <div className="inv-filters">
           <input aria-label="Buscar artículos" placeholder="Buscar nombre, categoría o código..." value={search} onChange={e => setSearch(e.target.value)} />
           <label>Tipo <select value={type} onChange={e => setType(e.target.value)}><option value="todos">Todos</option><option value="insumo">Insumos</option><option value="reventa">Productos de reventa</option></select></label>
@@ -298,13 +299,13 @@ export default function InventarioPage() {
         </table></div>
       </div>
       <aside className="inv-panel inv-alert-panel" id="alertas-stock" aria-labelledby="inv-alert-heading">
-        <div className="frontb-panel-actions"><div><h2 id="inv-alert-heading">Alertas de stock</h2><p className="frontb-section-note">Priorizá la reposición</p></div><strong className="inv-alert-count">{alertas.length}</strong></div>
+        <div className="frontb-panel-actions"><div><h2 id="inv-alert-heading">Alertas de stock</h2></div><strong className="inv-alert-count">{alertas.length}</strong></div>
         <div className="frontb-alert-list">
           {alertas.length ? alertas.map(item => <article className="frontb-alert-card" key={item.id}>
             <div className="frontb-alert-card__top"><strong>{item.nombre}</strong><span className={`inv-status inv-${getStatus(item).toLowerCase().replace(' ', '-')}`}>{getStatus(item)}</span></div>
             <p>Existencia: {item.stock} {item.unidad} · Mínimo: {item.minimo} {item.unidad}</p>
             <p>Compra sugerida: <strong>{suggestedPurchase(item)} {item.unidad}</strong></p>
-            <button type="button" onClick={() => navigate(`/compras?inventarioId=${encodeURIComponent(item.id)}`)}>Registrar compra</button>
+            {puedeRegistrarCompra && <button type="button" onClick={() => navigate(`/compras?inventarioId=${encodeURIComponent(item.id)}`)}>Registrar compra</button>}
           </article>) : <p className="frontb-empty-side">No hay artículos con stock bajo o agotados.</p>}
         </div>
       </aside>

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import useFrontBModal from '../hooks/useFrontBModal.js';
-import { comprasService, proveedoresService } from '../services/frontbRepos.js';
-import { listarArticulosParaSeleccion } from '../services/frontbApi.js';
-import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/frontbUtils.js';
-import FrontBNav from '../components/frontb/FrontBNav.jsx';
+import useGestionModal from '../hooks/useGestionModal.js';
+import { comprasService, proveedoresService } from '../services/gestionRepository.js';
+import { listarArticulosParaSeleccion } from '../services/gestionApi.js';
+import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/gestionUtils.js';
+import GestionNav from '../components/gestion/GestionNav.jsx';
+import { canCreate, canEdit, canDelete, canManage, MODULES } from '../utils/permissions.js';
 import '../styles/compras-feature.css';
 
 function normalizeCompra(c) {
@@ -21,6 +22,10 @@ function initialForm() {
 }
 
 export default function ComprasPage() {
+  const puedeCrear = canCreate(MODULES.COMPRAS);
+  const puedeEditar = canEdit();
+  const puedeEliminar = canDelete();
+  const puedeRecibir = canManage();
   const [searchParams] = useSearchParams();
   const preselectedId = searchParams.get('inventarioId');
   const [compras, setCompras] = useState(() => comprasService.list().map(normalizeCompra));
@@ -36,7 +41,7 @@ export default function ComprasPage() {
   const [linea, setLinea] = useState({ inventarioId: '', cantidad: '', costo: '' });
   const [error, setError] = useState('');
 
-  useEffect(() => { comprasService.save(compras); }, [compras]);
+  useEffect(() => { if (puedeCrear || puedeEditar) comprasService.save(compras); }, [compras, puedeCrear, puedeEditar]);
   useEffect(() => {
     const controller = new AbortController();
     const sync = () => {
@@ -50,15 +55,15 @@ export default function ComprasPage() {
     return () => { controller.abort(); uns(); window.removeEventListener('focus', sync); };
   }, []);
   useEffect(() => {
-    if (!preselectedId) return;
+    if (!preselectedId || !puedeCrear) return;
     setLinea({ inventarioId: preselectedId, cantidad: '', costo: '' });
     setEditingId(null);
     setForm(initialForm());
     setError('');
     setModal(true);
-  }, [preselectedId]);
+  }, [preselectedId, puedeCrear]);
   const close = () => { setModal(false); setError(''); };
-  const dialogRef = useFrontBModal(modal, close);
+  const dialogRef = useGestionModal(modal, close);
   const getProveedor = (c) => proveedores.find(p => String(p.id) === String(c.proveedorId))
     || proveedores.find(p => p.nombre.trim().toLowerCase() === String(c.proveedor).trim().toLowerCase());
   const displayProveedor = (c) => getProveedor(c)?.nombre || c.proveedor || 'Proveedor no encontrado';
@@ -73,6 +78,7 @@ export default function ComprasPage() {
   const totalForm = form.lineas.reduce((s, l) => s + Math.round(l.cantidad * l.costoCents), 0);
 
   function abrir(compra = null) {
+    if (compra ? !puedeEditar : !puedeCrear) return;
     setEditingId(compra?.id ?? null);
     setForm(compra ? { numero: compra.numero, proveedorId: String(getProveedor(compra)?.id || ''), fecha: compra.fecha,
       condicionPago: compra.condicionPago, vencimiento: compra.vencimiento || '',
@@ -84,6 +90,7 @@ export default function ComprasPage() {
     setError(''); setModal(true);
   }
   function agregarLinea() {
+    if (!(editingId ? puedeEditar : puedeCrear)) return;
     const item = inventario.find(p => String(p.id) === String(linea.inventarioId));
     const cantidad = Number(linea.cantidad);
     const costoCents = dollarsToCents(linea.costo);
@@ -97,6 +104,7 @@ export default function ComprasPage() {
   }
   function guardar(e) {
     e.preventDefault();
+    if (!(editingId ? puedeEditar : puedeCrear)) return;
     const numero = form.numero.trim();
     const proveedorData = proveedores.find(p => String(p.id) === String(form.proveedorId));
     if (!numero || !proveedorData || !form.fecha || form.lineas.length === 0) {
@@ -125,22 +133,24 @@ export default function ComprasPage() {
     setModal(false); setError('');
   }
   function marcarRecibida(compra) {
+    if (!puedeRecibir) return;
     if (!window.confirm(`¿Marcar como recibida la factura ${compra.numero}?`)) return;
     setCompras(old => old.map(c => c.id === compra.id && c.estado === 'Borrador'
       ? { ...c, estado: 'Recibida' } : c));
   }
   function eliminar(compra) {
+    if (!puedeEliminar) return;
     if (compra.estado !== 'Borrador') return;
     if (window.confirm(`¿Eliminar el borrador ${compra.numero}?`)) setCompras(old => old.filter(c => c.id !== compra.id));
   }
   const compraEnfocada = filtradas.find(c => String(c.id) === String(enfocadaId)) || filtradas[0] || null;
   return (
     <div className="frontb-workspace">
-      <FrontBNav />
+      <GestionNav />
       <section className="cmp-page">
       <header className="cmp-header">
-        <div><span className="frontb-eyebrow">GESTIÓN / FRONT B</span><h1>Compras</h1><p>Gestioná facturas, líneas de compra y recepción de insumos</p></div>
-        <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>
+        <div><h1>Compras</h1></div>
+        {puedeCrear && <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>}
       </header>
       {inventarioError && <p role="alert" className="cmp-error">No se pudo consultar Inventario: {inventarioError}</p>}
       <div className="cmp-stats">
@@ -151,7 +161,7 @@ export default function ComprasPage() {
       </div>
       <div className="frontb-split frontb-split--purchases">
       <section className="cmp-panel">
-        <div className="cmp-panel-head"><div className="frontb-panel-actions"><div><h2>Facturas de compra</h2><p className="frontb-section-note">Seguimiento por factura, proveedor y estado</p></div></div>
+        <div className="cmp-panel-head"><div className="frontb-panel-actions"><div><h2>Facturas de compra</h2></div></div>
           <div className="cmp-filters">
             <input aria-label="Buscar compras" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar factura o proveedor..." />
             <select aria-label="Filtrar por estado" value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
@@ -163,12 +173,12 @@ export default function ComprasPage() {
           <th>FACTURA</th><th>PROVEEDOR</th><th>FECHA</th><th>TOTAL</th><th>PAGO</th><th>ESTADO</th><th>ACCIONES</th>
         </tr></thead><tbody>
           {filtradas.map(c => <tr key={c.id} className={compraEnfocada?.id === c.id ? 'frontb-row-selected' : ''}>
-            <td><button type="button" className="frontb-table-select" onClick={() => setEnfocadaId(c.id)}>{c.numero}</button></td><td>{displayProveedor(c)}</td><td>{c.fecha}</td><td>{formatMoney(c.totalCents)}</td><td>{c.condicionPago}</td>
+            <td><strong>{c.numero}</strong></td><td>{displayProveedor(c)}</td><td>{c.fecha}</td><td>{formatMoney(c.totalCents)}</td><td>{c.condicionPago}</td>
             <td><span className={`cmp-status ${c.estado === 'Recibida' ? 'ok' : 'draft'}`}>{c.estado}</span></td>
-            <td><div className="cmp-actions">{c.estado === 'Borrador' ? <>
-              <button type="button" onClick={() => abrir(c)}>Editar</button>
-              <button type="button" onClick={() => marcarRecibida(c)}>Recibir</button>
-              <button type="button" onClick={() => eliminar(c)}>Eliminar</button>
+            <td><div className="cmp-actions"><button type="button" className="frontb-row-view" aria-label={`Ver detalle de compra ${c.numero}`} aria-pressed={compraEnfocada?.id === c.id} onClick={() => setEnfocadaId(c.id)}>Ver</button>{c.estado === 'Borrador' ? <>
+              {puedeEditar && <button type="button" onClick={() => abrir(c)}>Editar</button>}
+              {puedeRecibir && <button type="button" onClick={() => marcarRecibida(c)}>Recibir</button>}
+              {puedeEliminar && <button type="button" onClick={() => eliminar(c)}>Eliminar</button>}
             </> : <span>Registrada</span>}</div></td>
           </tr>)}
           {filtradas.length === 0 && <tr><td colSpan={7} className="cmp-empty">No hay compras registradas con estos filtros.</td></tr>}
@@ -183,7 +193,7 @@ export default function ComprasPage() {
           <h3>Detalle de artículos</h3>
           <ul className="frontb-detail-list">{compraEnfocada.lineas.map(l => <li key={l.id}><span>{inventario.find(i => String(i.id) === String(l.inventarioId))?.nombre || 'Artículo del inventario'}<small>{l.cantidad} {l.unidad}</small></span><strong>{formatMoney(l.costoCents * Number(l.cantidad))}</strong></li>)}</ul>
           <div className="frontb-detail-total"><span>Total de la factura</span><strong>{formatMoney(compraEnfocada.totalCents)}</strong></div>
-          {compraEnfocada.estado === 'Borrador' && <button className="cmp-primary frontb-detail-action" type="button" onClick={() => abrir(compraEnfocada)}>Editar compra</button>}
+          {puedeEditar && compraEnfocada.estado === 'Borrador' && <button className="cmp-primary frontb-detail-action" type="button" onClick={() => abrir(compraEnfocada)}>Editar compra</button>}
         </> : <p className="frontb-empty-side">Seleccioná una factura para ver sus artículos.</p>}
       </aside>
       </div>
