@@ -36,8 +36,18 @@ function OptionGroup({ options, value, onChange, label }) {
   );
 }
 
-export default function OrderPanel({ orderNumber, order, onProcessSale, clientes = [] }) {
-  const { items, totals, serviceType, receiptType, paymentMethod } = order;
+export default function OrderPanel({
+  orderNumber,
+  order,
+  onProcessSale,
+  clientes = [],
+  cajaAbierta = true,
+  saving = false,
+  onAddProduct,
+}) {
+  const { items, serviceType, receiptType, paymentMethod, totals } = order;
+  const isDisabled = saving || !cajaAbierta || items.length === 0 ||
+    (receiptType === 'credito-fiscal' && !order.clienteId);
 
   return (
     <aside className="order-panel" aria-label="Pedido actual">
@@ -71,9 +81,17 @@ export default function OrderPanel({ orderNumber, order, onProcessSale, clientes
               <small>{formatCents(item.priceCents)}$/u</small>
             </div>
             <div className="qty-stepper">
-              <button type="button" onClick={() => order.changeQuantity(item.id, -1)} aria-label={`Quitar una unidad de ${item.name}`}>−</button>
+              <button type="button"
+                onClick={() => order.changeQuantity(item.id, -1)}
+                aria-label={`Quitar una unidad de ${item.name}`}>−</button>
               <span>{item.quantity}</span>
-              <button type="button" onClick={() => order.changeQuantity(item.id, 1)} aria-label={`Agregar una unidad de ${item.name}`}>+</button>
+              <button
+                type="button"
+                onClick={() => (onAddProduct ? onAddProduct(item) : order.changeQuantity(item.id, 1))}
+                aria-label={`Agregar una unidad de ${item.name}`}
+              >
+                +
+              </button>
             </div>
             <span className="order-item-total">{formatCents(item.priceCents * item.quantity)}$</span>
             <button type="button" className="order-item-remove" onClick={() => order.removeProduct(item.id)} aria-label={`Eliminar ${item.name}`}>
@@ -118,8 +136,8 @@ export default function OrderPanel({ orderNumber, order, onProcessSale, clientes
         )}
         <p>Método de pago</p>
         <OptionGroup options={PAYMENT_METHODS} value={paymentMethod} onChange={order.setPaymentMethod} label="Método de pago" />
-        <button type="button" className="process-sale" disabled={items.length === 0 || (receiptType === 'credito-fiscal' && !order.clienteId)} onClick={onProcessSale}>
-          💳 Procesar venta
+        <button type="button" className="process-sale" disabled={isDisabled} onClick={onProcessSale}>
+          {saving ? '⏳ Procesando...' : !cajaAbierta ? '🔒 Abre caja para vender' : '💳 Procesar venta'}
         </button>
       </section>
     </aside>
@@ -127,4 +145,3 @@ export default function OrderPanel({ orderNumber, order, onProcessSale, clientes
 }
 
 
-  

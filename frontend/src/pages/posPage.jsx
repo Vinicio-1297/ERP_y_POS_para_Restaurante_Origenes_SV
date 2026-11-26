@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Alert } from 'reactstrap';
 import CategoryBar from '../components/pos/CategoryBar.jsx';
 import OrderPanel from '../components/pos/OrderPanel.jsx';
@@ -9,9 +9,37 @@ import { categories, products } from '../data/mockMenu.js';
 import { formatCents } from '../utils/money.js';
 import { crearPedido, obtenerProximoNumero } from '../services/pedidoService.js';
 import { listarClientes } from '../services/clienteService.js';
+import { getTurnoActual } from '../services/cajaService.js';
+import { inventarioService, recetasService } from '../services/frontbRepos.js';
 
 // Normaliza para que "te" encuentre "Té" al buscar.
 const normalize = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+function verificarStockDisponible(product, itemsActuales) {
+  const cantidadDeseada = (itemsActuales.find((i) => i.id === product.id)?.quantity || 0) + 1;
+
+  const stockDirecto = product.stock ?? product.stockDisponible;
+  if (typeof stockDirecto === 'number' && cantidadDeseada > stockDirecto) {
+    return `Stock insuficiente para "${product.name}". Disponible: ${stockDirecto} u.`;
+  }
+
+  const recetas = recetasService.list();
+  const receta = recetas.find((r) => String(r.productoId) === String(product.id));
+  if (receta && Array.isArray(receta.ingredientes) && receta.ingredientes.length > 0) {
+    const inventario = inventarioService.list();
+    const rendimiento = Number(receta.rendimiento) || 1;
+    for (const ing of receta.ingredientes) {
+      const insumo = inventario.find((inv) => String(inv.id) === String(ing.insumoId));
+      if (!insumo) continue;
+      const requerido = (Number(ing.cantidad) / rendimiento) * cantidadDeseada;
+      if (requerido > Number(insumo.stock)) {
+        return `Insumo insuficiente (${insumo.nombre}) para preparar "${product.name}". Stock actual: ${insumo.stock} ${insumo.unidad}.`;
+      }
+    }
+  }
+
+  return null;
+}
 
 export default function PosPage() {
   const { search } = useOutletContext();
@@ -22,6 +50,7 @@ export default function PosPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [clientes, setClientes] = useState([]);
+  const [estadoCaja, setEstadoCaja] = useState('verificando');
 
   const visibleProducts = useMemo(() => {
     const term = normalize(search.trim());
@@ -44,6 +73,21 @@ export default function PosPage() {
     cargarProximoNumero();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    async function comprobarCaja() {
+      try {
+        await getTurnoActual(controller.signal);
+        setEstadoCaja('abierta');
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        setEstadoCaja('cerrada');
+        if (err.status !== 404) setError(err.message);
+      }
+    }
+    comprobarCaja();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (order.receiptType !== 'credito-fiscal') return;
@@ -56,8 +100,24 @@ export default function PosPage() {
     return () => controller.abort();
   }, [order.receiptType]);
 
-  async function handleProcessSale() {
+  function handleAddProduct(product) {
+    setError(null);
+    const errorStock = verificarStockDisponible(product, order.items);
+    if (errorStock) {
+      setError(errorStock);
+      return;
+    }
+    order.addProduct(product);
+  }
+
+
+ async function handleProcessSale() {
     if (saving) return;
+    if (estadoCaja !== 'abierta') {
+      setError('No puedes procesar ventas porque la caja está cerrada. Abre un turno primero.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -68,7 +128,10 @@ export default function PosPage() {
         ...(order.receiptType === 'credito-fiscal' && { clienteId: order.clienteId }),
         items: order.items.map((item) => ({ productoId: item.id, cantidad: item.quantity })),
       });
-      setNotice(`Venta #${pedido.numero} registrada por $ ${formatCents(pedido.totalCents)}`);
+      const correlativo = pedido.correlativo || pedido.numeroComprobante;
+      setNotice(
+        `Venta #${pedido.numero}${correlativo ? ` (${correlativo})` : ''} registrada por $ ${formatCents(pedido.totalCents)}`,
+      );
       order.clearOrder();
       cargarProximoNumero();
     } catch (err) {
@@ -82,6 +145,16 @@ export default function PosPage() {
   return (
     <div className="pos-page">
       <section className="pos-menu">
+        {estadoCaja === 'cerrada' && (
+          <Alert color="warning" fade={false}>
+            <strong>Caja cerrada:</strong> No hay ningún turno abierto.{' '}
+            <Link to="/caja" className="alert-link">
+              Abrir turno en Caja
+            </Link>{' '}
+            para poder facturar.
+          </Alert>
+        )}
+
         {notice && (
           <Alert color="success" toggle={() => setNotice(null)} fade={false}>
             {notice}
@@ -100,14 +173,22 @@ export default function PosPage() {
           <p className="pos-empty">No hay productos que coincidan.</p>
         ) : (
           <div className="pos-grid">
-            {visibleProducts.map((product) => (
-              <ProductCard key={product.id} product={product} onAdd={order.addProduct} />
+           {visibleProducts.map((product) => (
+              <ProductCard key={product.id} product={product} onAdd={handleAddProduct} />
             ))}
           </div>
         )}
       </section>
 
-      <OrderPanel orderNumber={orderNumber} order={order} onProcessSale={handleProcessSale} clientes={clientes} />
+      <OrderPanel
+        orderNumber={orderNumber}
+        order={order}
+        onProcessSale={handleProcessSale}
+        clientes={clientes}
+        cajaAbierta={estadoCaja === 'abierta'}
+        saving={saving}
+        onAddProduct={handleAddProduct}
+      />
     </div>
   );
 }
