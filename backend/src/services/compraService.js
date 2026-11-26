@@ -1,7 +1,10 @@
-
 const compraRepository = require('../repositories/compraRepository');
 const inventarioService = require('./inventarioService');
+const cuentaPorPagarService = require('./cuentaPorPagarService');
 const { ejecutarEnTransaccion } = require('../config/transaccion');
+const { crearCompraSchema } = require('../schemas/compraSchemas');
+
+const MAX_INT = 2147483647;
 
 function crearError(mensaje, status = 400) {
   const error = new Error(mensaje);
@@ -10,9 +13,20 @@ function crearError(mensaje, status = 400) {
 }
 
 function validarId(id, campo = 'ID') {
-  if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
+  if (
+    !Number.isInteger(Number(id)) ||
+    Number(id) <= 0 ||
+    Number(id) > MAX_INT
+  ) {
     throw crearError(`${campo} no válido.`);
   }
+}
+
+// Obtener la fecha actual de El Salvador
+function fechaLocal() {
+  return new Date(Date.now() - 6 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function prepararDetalles(detalles) {
@@ -52,16 +66,25 @@ function prepararDetalles(detalles) {
 
     if (
       !Number.isSafeInteger(costoUnitarioCents) ||
-      costoUnitarioCents < 0
+      costoUnitarioCents < 0 ||
+      costoUnitarioCents > MAX_INT
     ) {
-      throw crearError('El costo unitario debe ser un entero en centavos.');
+      throw crearError('El costo unitario debe ser un entero válido en centavos.');
     }
 
-    const subtotalCents = Math.round(
-      (cantidadMil * costoUnitarioCents) / 1000
-    );
+    // Comprobar que el calculo no pierda precision
+    const importeMil = cantidadMil * costoUnitarioCents;
 
-    if (!Number.isSafeInteger(subtotalCents)) {
+    if (!Number.isSafeInteger(importeMil)) {
+      throw crearError('El subtotal excede el valor permitido.');
+    }
+
+    const subtotalCents = Math.round(importeMil / 1000);
+
+    if (
+      !Number.isSafeInteger(subtotalCents) ||
+      subtotalCents > MAX_INT
+    ) {
       throw crearError('El subtotal excede el valor permitido.');
     }
 
@@ -98,6 +121,15 @@ async function crear(datos, usuarioId) {
   validarId(datos.sucursalId, 'El ID de la sucursal');
   validarId(usuarioId, 'El ID del usuario');
 
+  // Validar tambien los datos cuando se llama directamente al servicio
+  const validacion = crearCompraSchema.safeParse(datos);
+
+  if (!validacion.success) {
+    throw crearError('Los datos de la compra no son válidos.');
+  }
+
+  datos = validacion.data;
+
   const detalles = prepararDetalles(datos.detalles);
 
   const subtotalCents = detalles.reduce(
@@ -105,37 +137,77 @@ async function crear(datos, usuarioId) {
     0
   );
 
-  if (!Number.isSafeInteger(subtotalCents)) {
+  if (
+    !Number.isSafeInteger(subtotalCents) ||
+    subtotalCents > MAX_INT
+  ) {
     throw crearError('El total de la compra excede el valor permitido.');
   }
 
-  return await ejecutarEnTransaccion(async (tx) => {
-    const proveedor = await compraRepository.obtenerProveedorActivo(
-      datos.proveedorId,
-      tx
+  // Las compras a credito deben generar una deuda positiva
+  if (datos.condicionPago === 'credito' && subtotalCents <= 0) {
+    throw crearError(
+      'Una compra a crédito debe tener un total mayor que cero.'
     );
+  }
 
-    if (!proveedor) {
-      throw crearError('El proveedor no existe o está desactivado.', 404);
-    }
+  // No permitir facturas con fechas futuras
+  if (datos.fechaFactura && datos.fechaFactura > fechaLocal()) {
+    throw crearError(
+      'La fecha de la factura no puede ser futura.'
+    );
+  }
 
-    const compra = await compraRepository.crear({
-      proveedorId: Number(datos.proveedorId),
-      sucursalId: Number(datos.sucursalId),
-      usuarioId: Number(usuarioId),
-      subtotalCents,
-      observaciones: datos.observaciones?.trim() || null
-    }, tx);
+  try {
+    return await ejecutarEnTransaccion(async (tx) => {
+      const proveedor = await compraRepository.obtenerProveedorActivo(
+        datos.proveedorId,
+        tx
+      );
 
-    for (const detalle of detalles) {
-      await compraRepository.crearDetalle({
-        compraId: compra.id,
-        ...detalle
+      if (!proveedor) {
+        throw crearError(
+          'El proveedor no existe o está desactivado.',
+          404
+        );
+      }
+
+      const compra = await compraRepository.crear({
+        proveedorId: Number(datos.proveedorId),
+        sucursalId: Number(datos.sucursalId),
+        usuarioId: Number(usuarioId),
+        subtotalCents,
+        condicionPago: datos.condicionPago,
+        factura: datos.factura ?? null,
+        fechaFactura: datos.fechaFactura ?? null,
+        vencimiento: datos.vencimiento ?? null,
+        observaciones: datos.observaciones?.trim() || null
       }, tx);
+
+      for (const detalle of detalles) {
+        await compraRepository.crearDetalle({
+          compraId: compra.id,
+          ...detalle
+        }, tx);
+      }
+
+      return await compraRepository.obtenerPorId(compra.id, tx);
+    });
+
+  } catch (error) {
+    // Controlar facturas duplicadas del mismo proveedor
+    if (
+      (error.number === 2601 || error.number === 2627) &&
+      error.message.includes('UX_compras_proveedor_factura')
+    ) {
+      throw crearError(
+        'Ya existe una compra con esa factura para el proveedor.',
+        409
+      );
     }
 
-    return await compraRepository.obtenerPorId(compra.id, tx);
-  });
+    throw error;
+  }
 }
 
 // Recibir compra y actualizar inventario
@@ -173,11 +245,27 @@ async function recibir(id, usuarioId) {
       }, tx);
     }
 
-    await compraRepository.marcarRecibida(
+    const compraRecibida = await compraRepository.marcarRecibida(
       id,
       Number(usuarioId),
       tx
     );
+
+    if (!compraRecibida) {
+      throw crearError(
+        'No se pudo marcar la compra como recibida.',
+        409
+      );
+    }
+
+    // Generar la cuenta por pagar si la compra es a credito
+    if (compraRecibida.condicion_pago === 'credito') {
+      await cuentaPorPagarService.generarDesdeCompra(
+        compraRecibida,
+        Number(usuarioId),
+        tx
+      );
+    }
 
     return await compraRepository.obtenerPorId(id, tx);
   });

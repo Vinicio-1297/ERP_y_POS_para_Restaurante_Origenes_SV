@@ -1,4 +1,3 @@
-
 const sql = require('mssql');
 const { crearRequest } = require('./request');
 
@@ -11,28 +10,32 @@ async function listar(filtros = {}) {
   request.input('sucursalId', sql.Int, filtros.sucursalId || null);
 
   const resultado = await request.query(`
-    SELECT
+    select
       c.id,
       c.proveedor_id,
-      p.razon_social AS proveedor,
+      p.razon_social as proveedor,
       c.sucursal_id,
       c.usuario_id,
       c.fecha_compra,
       c.estado,
       c.subtotal_cents,
       c.total_cents,
+      c.condicion_pago,
+      c.factura,
+      c.fecha_factura,
+      c.vencimiento,
       c.observaciones,
       c.recibido_en,
       c.recibido_por,
       c.creado_en
-    FROM dbo.compras c
-    INNER JOIN dbo.proveedores p
-      ON p.id = c.proveedor_id
-    WHERE
-      (@estado IS NULL OR c.estado = @estado)
-      AND (@proveedorId IS NULL OR c.proveedor_id = @proveedorId)
-      AND (@sucursalId IS NULL OR c.sucursal_id = @sucursalId)
-    ORDER BY c.fecha_compra DESC, c.id DESC;
+    from dbo.compras c
+    inner join dbo.proveedores p
+      on p.id = c.proveedor_id
+    where
+      (@estado is null or c.estado = @estado)
+      and (@proveedorId is null or c.proveedor_id = @proveedorId)
+      and (@sucursalId is null or c.sucursal_id = @sucursalId)
+    order by c.fecha_compra desc, c.id desc;
   `);
 
   return resultado.recordset;
@@ -45,13 +48,13 @@ async function obtenerPorId(id, transaccion = null) {
   request.input('id', sql.Int, id);
 
   const compra = await request.query(`
-    SELECT
+    select
       c.*,
-      p.razon_social AS proveedor
-    FROM dbo.compras c
-    INNER JOIN dbo.proveedores p
-      ON p.id = c.proveedor_id
-    WHERE c.id = @id;
+      p.razon_social as proveedor
+    from dbo.compras c
+    inner join dbo.proveedores p
+      on p.id = c.proveedor_id
+    where c.id = @id;
   `);
 
   if (!compra.recordset.length) {
@@ -63,20 +66,20 @@ async function obtenerPorId(id, transaccion = null) {
   detalleRequest.input('compraId', sql.Int, id);
 
   const detalles = await detalleRequest.query(`
-    SELECT
+    select
       d.id,
       d.compra_id,
       d.insumo_id,
-      i.nombre AS insumo,
+      i.nombre as insumo,
       i.unidad,
       d.cantidad,
       d.costo_unitario_cents,
       d.subtotal_cents
-    FROM dbo.compra_detalles d
-    INNER JOIN dbo.insumos i
-      ON i.id = d.insumo_id
-    WHERE d.compra_id = @compraId
-    ORDER BY d.id ASC;
+    from dbo.compra_detalles d
+    inner join dbo.insumos i
+      on i.id = d.insumo_id
+    where d.compra_id = @compraId
+    order by d.id asc;
   `);
 
   return {
@@ -92,9 +95,9 @@ async function obtenerProveedorActivo(id, transaccion = null) {
   request.input('id', sql.Int, id);
 
   const resultado = await request.query(`
-    SELECT id, razon_social, activo
-    FROM dbo.proveedores
-    WHERE id = @id AND activo = 1;
+    select id, razon_social, activo
+    from dbo.proveedores
+    where id = @id and activo = 1;
   `);
 
   return resultado.recordset[0] || null;
@@ -110,29 +113,62 @@ async function crear(datos, transaccion) {
   request.input('subtotalCents', sql.Int, datos.subtotalCents);
   request.input('observaciones', sql.NVarChar(500), datos.observaciones ?? null);
 
+  // Guardar los datos de facturacion y condicion de pago
+  request.input(
+    'condicionPago',
+    sql.NVarChar(20),
+    datos.condicionPago ?? 'contado'
+  );
+
+  request.input(
+    'factura',
+    sql.NVarChar(100),
+    datos.factura ?? null
+  );
+
+  request.input(
+    'fechaFactura',
+    sql.Date,
+    datos.fechaFactura ?? null
+  );
+
+  request.input(
+    'vencimiento',
+    sql.Date,
+    datos.vencimiento ?? null
+  );
+
   const resultado = await request.query(`
-    INSERT INTO dbo.compras (
+    insert into dbo.compras (
       proveedor_id,
       sucursal_id,
       usuario_id,
       subtotal_cents,
       total_cents,
+      condicion_pago,
+      factura,
+      fecha_factura,
+      vencimiento,
       observaciones
     )
-    OUTPUT INSERTED.id
-    VALUES (
+    output inserted.id
+    values (
       @proveedorId,
       @sucursalId,
       @usuarioId,
       @subtotalCents,
       @subtotalCents,
+      @condicionPago,
+      @factura,
+      @fechaFactura,
+      @vencimiento,
       @observaciones
     );
   `);
 
   return {
-  id: resultado.recordset[0].id
-};
+    id: resultado.recordset[0].id
+  };
 }
 
 // Agregar detalle de compra
@@ -146,15 +182,15 @@ async function crearDetalle(datos, transaccion) {
   request.input('subtotalCents', sql.Int, datos.subtotalCents);
 
   const resultado = await request.query(`
-    INSERT INTO dbo.compra_detalles (
+    insert into dbo.compra_detalles (
       compra_id,
       insumo_id,
       cantidad,
       costo_unitario_cents,
       subtotal_cents
     )
-    OUTPUT INSERTED.*
-    VALUES (
+    output inserted.*
+    values (
       @compraId,
       @insumoId,
       @cantidad,
@@ -173,9 +209,9 @@ async function obtenerParaActualizar(id, transaccion) {
   request.input('id', sql.Int, id);
 
   const resultado = await request.query(`
-    SELECT *
-    FROM dbo.compras WITH (UPDLOCK, HOLDLOCK)
-    WHERE id = @id;
+    select *
+    from dbo.compras with (updlock, holdlock)
+    where id = @id;
   `);
 
   return resultado.recordset[0] || null;
@@ -188,16 +224,16 @@ async function obtenerDetalles(compraId, transaccion) {
   request.input('compraId', sql.Int, compraId);
 
   const resultado = await request.query(`
-    SELECT
+    select
       id,
       compra_id,
       insumo_id,
       cantidad,
       costo_unitario_cents,
       subtotal_cents
-    FROM dbo.compra_detalles
-    WHERE compra_id = @compraId
-    ORDER BY id ASC;
+    from dbo.compra_detalles
+    where compra_id = @compraId
+    order by id asc;
   `);
 
   return resultado.recordset;
@@ -211,13 +247,13 @@ async function marcarRecibida(id, usuarioId, transaccion) {
   request.input('usuarioId', sql.Int, usuarioId);
 
   const resultado = await request.query(`
-    UPDATE dbo.compras
-    SET
+    update dbo.compras
+    set
       estado = 'recibida',
-      recibido_en = SYSUTCDATETIME(),
+      recibido_en = sysutcdatetime(),
       recibido_por = @usuarioId
-    OUTPUT INSERTED.*
-    WHERE id = @id AND estado = 'pendiente';
+    output inserted.*
+    where id = @id and estado = 'pendiente';
   `);
 
   return resultado.recordset[0] || null;
@@ -230,10 +266,10 @@ async function anular(id, transaccion) {
   request.input('id', sql.Int, id);
 
   const resultado = await request.query(`
-    UPDATE dbo.compras
-    SET estado = 'anulada'
-    OUTPUT INSERTED.*
-    WHERE id = @id AND estado = 'pendiente';
+    update dbo.compras
+    set estado = 'anulada'
+    output inserted.*
+    where id = @id and estado = 'pendiente';
   `);
 
   return resultado.recordset[0] || null;

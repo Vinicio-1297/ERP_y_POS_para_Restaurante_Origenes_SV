@@ -16,6 +16,7 @@ const planillaRoutes = require('./routes/planillaRoutes');
 const inventarioRoutes = require('./routes/inventarioRoutes');
 const proveedorRoutes = require('./routes/proveedorRoutes');
 const compraRoutes = require('./routes/compraRoutes');
+const cuentaPorPagarRoutes = require('./routes/cuentaPorPagarRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -37,6 +38,7 @@ app.use('/api', planillaRoutes);
 app.use('/api', inventarioRoutes);
 app.use('/api', proveedorRoutes);
 app.use('/api', compraRoutes);
+app.use('/api', cuentaPorPagarRoutes);
 app.use(errorHandler);
 
 module.exports = app;

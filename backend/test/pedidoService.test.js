@@ -1,10 +1,11 @@
-// Prueba la LÓGICA del servicio sin base de datos: los repositorios y la transacción se reemplazan por
-// versiones falsas (en memoria) antes de cargar pedidoService. Por eso esto corre sin SQL Server.
+// Prueba la lógica del servicio sin base de datos.
+// Los repositorios y las transacciones se simulan en memoria.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 function reemplazarModulo(ruta, exportaciones) {
   const archivo = require.resolve(ruta);
+
   require.cache[archivo] = {
     id: archivo,
     filename: archivo,
@@ -19,8 +20,18 @@ let estado;
 function reiniciar({ productos, contadores, clientes } = {}) {
   estado = {
     productos: productos ?? [
-      { id: 1, nombre: 'Croissant', precioCents: 280 },
-      { id: 2, nombre: 'Té helado', precioCents: 280 },
+      {
+        id: 1,
+        nombre: 'Croissant',
+        precioCents: 280,
+        tipoProducto: 'elaborado'
+      },
+      {
+        id: 2,
+        nombre: 'Té helado',
+        precioCents: 280,
+        tipoProducto: 'elaborado'
+      },
     ],
 
     // Clientes ficticios para probar los comprobantes.
@@ -58,56 +69,77 @@ function reiniciar({ productos, contadores, clientes } = {}) {
 
     pedidosGuardados: [],
     detallesGuardados: [],
+    movimientosGuardados: [],
     resultadoTransaccion: null,
   };
 }
 
+// Simula una transacción con commit y rollback.
 reemplazarModulo('../src/config/transaccion', {
   async ejecutarEnTransaccion(trabajo) {
     const copiaContadores = { ...estado.contadores };
+    const copiaPedidos = [...estado.pedidosGuardados];
+    const copiaDetalles = [...estado.detallesGuardados];
+    const copiaMovimientos = [...estado.movimientosGuardados];
 
     try {
       const resultado = await trabajo({ falsa: true });
+
       estado.resultadoTransaccion = 'commit';
+
       return resultado;
     } catch (error) {
-      estado.contadores = copiaContadores; // rollback: los contadores vuelven atrás
-      estado.pedidosGuardados = [];
-      estado.detallesGuardados = [];
+      estado.contadores = copiaContadores;
+      estado.pedidosGuardados = copiaPedidos;
+      estado.detallesGuardados = copiaDetalles;
+      estado.movimientosGuardados = copiaMovimientos;
       estado.resultadoTransaccion = 'rollback';
+
       throw error;
     }
   },
 });
 
+// Simula la búsqueda de productos.
 reemplazarModulo('../src/repositories/productoRepository', {
   async buscarPorIds(ids) {
-    return estado.productos.filter((producto) => ids.includes(producto.id));
+    return estado.productos.filter(
+      (producto) => ids.includes(producto.id)
+    );
   },
 });
 
 // Simula la búsqueda de clientes sin consultar SQL Server.
 reemplazarModulo('../src/repositories/clienteRepository', {
   async buscarPorId(id) {
-    return estado.clientes.find((cliente) => cliente.id === id) ?? null;
+    return estado.clientes.find(
+      (cliente) => cliente.id === id
+    ) ?? null;
   },
 });
 
+// Simula los correlativos de pedidos y comprobantes.
 reemplazarModulo('../src/repositories/correlativoRepository', {
   async obtenerUltimo(tipo) {
     return estado.contadores[tipo] ?? null;
   },
 
   async incrementar(tipo) {
-    if (!(tipo in estado.contadores)) return null;
+    if (!(tipo in estado.contadores)) {
+      return null;
+    }
+
     estado.contadores[tipo] += 1;
+
     return estado.contadores[tipo];
   },
 });
 
+// Simula el registro de pedidos y sus detalles.
 reemplazarModulo('../src/repositories/pedidoRepository', {
   async insertar(datos) {
     estado.pedidosGuardados.push(datos);
+
     return {
       id: 120,
       fecha: new Date('2026-11-22T18:09:00Z')
@@ -119,6 +151,55 @@ reemplazarModulo('../src/repositories/pedidoRepository', {
   },
 });
 
+// Simula las recetas de los productos de prueba.
+reemplazarModulo('../src/repositories/recetaRepository', {
+  async obtenerPorProductos(ids, transaccion) {
+    assert.ok(transaccion);
+
+    const recetas = [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 1,
+        cantidad: 100,
+      },
+      {
+        productoId: 2,
+        insumoId: 2,
+        rendimiento: 1,
+        cantidad: 200,
+      },
+    ];
+
+    return recetas.filter(
+      (receta) => ids.includes(receta.productoId)
+    );
+  },
+});
+
+// Simula la consulta de movimientos de inventario.
+reemplazarModulo('../src/repositories/inventarioRepository', {
+  async listarSalidasPorPedido(pedidoId) {
+    return estado.movimientosGuardados.filter(
+      (movimiento) =>
+        movimiento.referenciaId === pedidoId &&
+        movimiento.tipo === 'salida'
+    );
+  },
+});
+
+// Simula los movimientos de inventario sin SQL Server.
+reemplazarModulo('../src/services/inventarioService', {
+  async aplicarMovimiento(datos, transaccion) {
+    assert.ok(transaccion);
+    assert.ok(datos.cantidad > 0);
+    assert.equal(datos.tipo, 'salida');
+
+    estado.movimientosGuardados.push({ ...datos });
+  },
+});
+
+// Cargar el servicio después de simular sus dependencias.
 const {
   crearPedido,
   obtenerProximoNumero
@@ -137,7 +218,10 @@ const pedidoBase = {
 test('crea el pedido con los totales del contrato (560 / 73 / 633)', async () => {
   reiniciar();
 
-  const respuesta = await crearPedido(pedidoBase, { usuarioId: 7 });
+  const respuesta = await crearPedido(
+    pedidoBase,
+    { usuarioId: 7 }
+  );
 
   assert.equal(respuesta.id, 120);
   assert.equal(respuesta.numero, '0001');
@@ -155,7 +239,13 @@ test('el precio sale de la base, aunque el front mande otro', async () => {
 
   const respuesta = await crearPedido({
     ...pedidoBase,
-    items: [{ productoId: 1, cantidad: 2, precioCents: 1 }], // el campo extra se ignora
+    items: [
+      {
+        productoId: 1,
+        cantidad: 2,
+        precioCents: 1
+      }
+    ],
   });
 
   assert.equal(respuesta.subtotalCents, 560);
@@ -183,7 +273,9 @@ test('producto inexistente: error 400, rollback y no se gasta ningún correlativ
   await assert.rejects(
     crearPedido({
       ...pedidoBase,
-      items: [{ productoId: 999, cantidad: 1 }]
+      items: [
+        { productoId: 999, cantidad: 1 }
+      ]
     }),
     (error) => error.status === 400 && /999/.test(error.message),
   );
@@ -198,7 +290,7 @@ test('consumidor final y crédito fiscal llevan contadores separados', async () 
 
   const a = await crearPedido(pedidoBase);
 
-  // El crédito fiscal ahora requiere un cliente con datos fiscales.
+  // El crédito fiscal requiere un cliente con datos fiscales.
   const b = await crearPedido({
     ...pedidoBase,
     tipoComprobante: 'credito-fiscal',
@@ -210,16 +302,22 @@ test('consumidor final y crédito fiscal llevan contadores separados', async () 
   assert.deepEqual(
     [a.numero, b.numero, c.numero],
     ['0001', '0002', '0003']
-  ); // pedidos: uno solo
+  );
 
   assert.deepEqual(
-    [a.numeroComprobante, b.numeroComprobante, c.numeroComprobante],
+    [
+      a.numeroComprobante,
+      b.numeroComprobante,
+      c.numeroComprobante
+    ],
     ['000001', '000001', '000002']
   );
 });
 
 test('si el contador no existe, falla y deshace todo', async () => {
-  reiniciar({ contadores: { pedido: 0 } }); // falta consumidor-final
+  reiniciar({
+    contadores: { pedido: 0 }
+  });
 
   await assert.rejects(
     crearPedido(pedidoBase),
@@ -239,19 +337,30 @@ test('guarda el proveedor digital (bitcoin o chivo) cuando llega', async () => {
     proveedorDigital: 'bitcoin',
   });
 
-  assert.equal(estado.pedidosGuardados[0].metodoPago, 'digital');
-  assert.equal(estado.pedidosGuardados[0].proveedorDigital, 'bitcoin');
+  assert.equal(
+    estado.pedidosGuardados[0].metodoPago,
+    'digital'
+  );
+
+  assert.equal(
+    estado.pedidosGuardados[0].proveedorDigital,
+    'bitcoin'
+  );
 });
 
 test('próximo número: último + 1, con ceros a la izquierda', async () => {
-  reiniciar({ contadores: { pedido: 41 } });
+  reiniciar({
+    contadores: { pedido: 41 }
+  });
 
   assert.deepEqual(
     await obtenerProximoNumero(),
     { numero: '0042' }
   );
 
-  reiniciar({ contadores: {} }); // sin contador todavía
+  reiniciar({
+    contadores: {}
+  });
 
   assert.deepEqual(
     await obtenerProximoNumero(),
@@ -267,7 +376,11 @@ test('permite registrar consumidor final sin cliente', async () => {
   await crearPedido(pedidoBase);
 
   assert.equal(estado.resultadoTransaccion, 'commit');
-  assert.equal(estado.pedidosGuardados[0].clienteId, undefined);
+
+  assert.equal(
+    estado.pedidosGuardados[0].clienteId,
+    undefined
+  );
 });
 
 test('permite consumidor final con un cliente sin datos fiscales', async () => {
@@ -339,7 +452,9 @@ test('rechaza un crédito fiscal con datos fiscales incompletos', async () => {
       tipoComprobante: 'credito-fiscal',
       clienteId: 2,
     }),
-    (error) => error.status === 400 && /datos fiscales/.test(error.message),
+    (error) =>
+      error.status === 400 &&
+      /datos fiscales/.test(error.message),
   );
 
   assert.equal(estado.contadores.pedido, 0);

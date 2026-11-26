@@ -1,4 +1,3 @@
-
 const { z } = require('zod');
 
 // Validar los detalles de una compra
@@ -27,6 +26,24 @@ const crearCompraSchema = z.object({
 
   sucursalId: z.coerce.number().int().positive().max(2147483647),
 
+  condicionPago: z.enum(['contado', 'credito'])
+    .default('contado'),
+
+  factura: z.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullable()
+    .optional(),
+
+  fechaFactura: z.iso.date()
+    .nullable()
+    .optional(),
+
+  vencimiento: z.iso.date()
+    .nullable()
+    .optional(),
+
   observaciones: z.string()
     .trim()
     .max(500)
@@ -34,7 +51,58 @@ const crearCompraSchema = z.object({
     .optional(),
 
   detalles: z.array(detalleCompraSchema).min(1),
-}).strict();
+
+}).strict().superRefine((datos, ctx) => {
+
+  // validar los datos necesarios para una compra a credito
+  if (datos.condicionPago === 'credito') {
+
+    if (!datos.factura) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['factura'],
+        message: 'La factura es obligatoria para compras a crédito.',
+      });
+    }
+
+    if (!datos.fechaFactura) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fechaFactura'],
+        message: 'La fecha de la factura es obligatoria.',
+      });
+    }
+
+    if (!datos.vencimiento) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['vencimiento'],
+        message: 'El vencimiento es obligatorio para compras a crédito.',
+      });
+    }
+
+    if (
+      datos.fechaFactura &&
+      datos.vencimiento &&
+      datos.vencimiento < datos.fechaFactura
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['vencimiento'],
+        message: 'El vencimiento no puede ser anterior a la factura.',
+      });
+    }
+  }
+
+  // las compras al contado no generan vencimientos
+  if (datos.condicionPago === 'contado' && datos.vencimiento) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['vencimiento'],
+      message: 'Una compra al contado no debe tener vencimiento.',
+    });
+  }
+});
 
 // Validar el identificador de una compra
 const compraIdSchema = z.object({
