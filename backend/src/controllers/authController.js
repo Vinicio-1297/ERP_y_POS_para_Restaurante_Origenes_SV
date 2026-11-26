@@ -20,4 +20,20 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { login, me };
+// obtener informacion de contacto para recuperar la contrasena
+function soporte(req, res) {
+  const correo = process.env.SUPPORT_EMAIL;
+
+  if (!correo) {
+    return res.status(503).json({
+      message: 'El correo de soporte no esta configurado.'
+    });
+  }
+
+  return res.status(200).json({
+    correo,
+    mensaje: `Si olvidaste tu contraseña, comunícate con el administrador del sistema al correo ${correo}.`
+  });
+}
+
+module.exports = { login, me, soporte };
