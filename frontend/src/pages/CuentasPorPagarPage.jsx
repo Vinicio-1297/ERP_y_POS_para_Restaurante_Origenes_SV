@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { cuentasPorPagarService, proveedoresService, comprasService } from '../services/gestionRepository.js';
-import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, localDate, newFrontBId } from '../utils/gestionUtils.js';
+import {
+  listarCompras,
+  listarProveedores,
+} from '../services/comprasProveedoresApi.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
 import { canCreate, canManage, MODULES } from '../utils/permissions.js';
 import '../styles/cuentas-por-pagar-feature.css';
+import { localDate, formatMoney } from '../utils/gestionUtils.js';
 
 const initialForm = () => ({ factura: '', proveedorId: '', fecha: '', vencimiento: '', total: '' });
 
@@ -23,9 +26,9 @@ function invoiceStatus(f, saldo) {
 export default function CuentasPorPagarPage() {
   const puedeCrear = canCreate(MODULES.CUENTAS_POR_PAGAR);
   const puedeRegistrarAbonos = canManage();
-  const [facturas, setFacturas] = useState(() => cuentasPorPagarService.list().map(normalizeInvoice));
-  const [proveedores, setProveedores] = useState(proveedoresService.list);
-  const [compras, setCompras] = useState(comprasService.list);
+  const [facturas, setFacturas] = useState(() => []);
+  const [proveedores, setProveedores] = useState([]);
+  const [compras, setCompras] = useState([]);
   const [enfocadaId, setEnfocadaId] = useState(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('Todas');
@@ -35,17 +38,37 @@ export default function CuentasPorPagarPage() {
   const [error, setError] = useState('');
   const [payment, setPayment] = useState({ monto: '', fecha: localDate(), metodo: 'Efectivo' });
 
-  useEffect(() => { if (puedeCrear || puedeRegistrarAbonos) cuentasPorPagarService.save(facturas); }, [facturas, puedeCrear, puedeRegistrarAbonos]);
   useEffect(() => {
-    const uns1 = subscribeRows(STORE_KEYS.proveedores, () => setProveedores(proveedoresService.list()));
-    const uns2 = subscribeRows(STORE_KEYS.compras, () => setCompras(comprasService.list()));
-    return () => { uns1(); uns2(); };
+    const controller = new AbortController();
+    listarProveedores({}, controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted) {
+          setProveedores(Array.isArray(rows) ? rows : (rows.proveedores ?? []));
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') setError(err.message);
+      });
+
+    listarCompras({}, controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted) {
+          setCompras(Array.isArray(rows) ? rows : (rows.compras ?? []));
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') setError(err.message);
+      });
+
+    return () => controller.abort();
   }, []);
   const close = () => { setShowForm(false); setSelected(null); setError(''); };
   const dialogRef = useGestionModal(Boolean(showForm || selected), close);
+  const nombreProveedor = (p) => p?.nombre || p?.razon_social || p?.nombre_comercial || '';
+  const estaActivo = (p) => (typeof p?.activo === 'boolean' ? p.activo : p?.estado === 'Activo');
   const getProveedor = (f) => proveedores.find(p => String(p.id) === String(f.proveedorId))
-    || proveedores.find(p => p.nombre.toLowerCase() === String(f.proveedor).toLowerCase());
-  const displayProveedor = (f) => getProveedor(f)?.nombre || f.proveedor || 'Proveedor no encontrado';
+    || proveedores.find(p => nombreProveedor(p).toLowerCase() === String(f.proveedor || '').toLowerCase());
+  const displayProveedor = (f) => nombreProveedor(getProveedor(f)) || f.proveedor || 'Proveedor no encontrado';
   const withBalance = useMemo(() => facturas.map(f => {
     const saldoCents = Math.max(0, f.totalCents - f.pagos.reduce((sum, payment) => sum + payment.montoCents, 0));
     return { ...f, saldoCents, estado: invoiceStatus(f, saldoCents) };
@@ -70,7 +93,7 @@ export default function CuentasPorPagarPage() {
     if (!form.factura.trim() || !proveedorData || !form.fecha || !form.vencimiento) {
       setError('Completá los datos obligatorios y seleccioná un proveedor registrado.'); return;
     }
-    if (proveedorData.estado !== 'Activo') { setError('Seleccioná un proveedor activo.'); return; }
+    if (!estaActivo(proveedorData)) { setError('Seleccioná un proveedor activo.'); return; }
     if (totalCents === null || totalCents <= 0) { setError('El total debe ser de al menos $0.01 y tener máximo dos decimales.'); return; }
     if (form.vencimiento < form.fecha) { setError('El vencimiento no puede ser anterior a la compra.'); return; }
     if (facturas.some(f => f.factura.trim().toLowerCase() === form.factura.trim().toLowerCase() &&
@@ -78,7 +101,7 @@ export default function CuentasPorPagarPage() {
       setError('Ya hay una cuenta con ese número de factura para el proveedor.'); return;
     }
     const invoice = { id: newFrontBId('cpp'), factura: form.factura.trim(), proveedorId: String(proveedorData.id),
-      proveedor: proveedorData.nombre, fecha: form.fecha, vencimiento: form.vencimiento, totalCents, pagos: [] };
+      proveedor: nombreProveedor(proveedorData), fecha: form.fecha, vencimiento: form.vencimiento, totalCents, pagos: [] };
     setFacturas(prev => [invoice, ...prev]);
     setEnfocadaId(invoice.id);
     close(); setForm(initialForm());
@@ -167,9 +190,9 @@ export default function CuentasPorPagarPage() {
               <label>Número de factura<input required value={form.factura} onChange={(e) => setForm({ ...form, factura: e.target.value })}/></label>
               <label>Proveedor<select required value={form.proveedorId} onChange={(e) => setForm({ ...form, proveedorId: e.target.value })}>
                 <option value="">Seleccioná un proveedor...</option>
-                {proveedores.filter(p => p.estado === 'Activo').map(p => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+                {proveedores.filter(estaActivo).map(p => <option key={p.id} value={String(p.id)}>{nombreProveedor(p)}</option>)}
               </select></label>
-              {!proveedores.some(p => p.estado === 'Activo') && <p className="cpp-helper">No hay proveedores activos. <Link to="/proveedores">Registrá uno en Proveedores</Link>.</p>}
+              {!proveedores.some(estaActivo) && <p className="cpp-helper">No hay proveedores activos. <Link to="/proveedores">Registrá uno en Proveedores</Link>.</p>}
               <label>Fecha de compra<input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })}/></label>
               <label>Fecha de vencimiento<input type="date" required value={form.vencimiento} onChange={(e) => setForm({ ...form, vencimiento: e.target.value })}/></label>
               <label>Total de la factura ($)<input type="number" step="0.01" min="0.01" required value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })}/></label>
