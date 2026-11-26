@@ -14,6 +14,8 @@ const cajaRoutes = require('./routes/cajaRoutes');
 const reporteRoutes = require('./routes/reporteRoutes');
 const planillaRoutes = require('./routes/planillaRoutes');
 const inventarioRoutes = require('./routes/inventarioRoutes');
+const proveedorRoutes = require('./routes/proveedorRoutes');
+const compraRoutes = require('./routes/compraRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -33,6 +35,8 @@ app.use('/api', cajaRoutes);
 app.use('/api', reporteRoutes);
 app.use('/api', planillaRoutes);
 app.use('/api', inventarioRoutes);
+app.use('/api', proveedorRoutes);
+app.use('/api', compraRoutes);
 app.use(errorHandler);
 
 module.exports = app;
