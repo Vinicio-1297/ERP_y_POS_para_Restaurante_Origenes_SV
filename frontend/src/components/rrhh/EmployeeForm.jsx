@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Col, Form, FormGroup, Input, Label, Row } from 'reactstrap';
+import { Button, Col, Form, FormFeedback, FormGroup, Input, Label, Row } from 'reactstrap';
 import { isValidAmount, toCents } from '../../utils/moneyInput.js';
 
 const FORM_VACIO = {
@@ -31,6 +31,24 @@ function aFormulario(empleado) {
   };
 }
 
+// Dejan solo números y colocan los guiones automáticamente.
+const soloDigitos = (valor, maximo) => valor.replace(/\D/g, '').slice(0, maximo);
+
+function conGuiones(valor, grupos) {
+  const digitos = soloDigitos(valor, grupos.reduce((total, n) => total + n, 0));
+  let inicio = 0;
+  return grupos
+    .map((n) => digitos.slice(inicio, (inicio += n)))
+    .filter(Boolean)
+    .join('-');
+}
+
+const FORMATOS = {
+  dui: (valor) => conGuiones(valor, [8, 1]),
+  nit: (valor) => conGuiones(valor, [4, 6, 3, 1]),
+  telefono: (valor) => conGuiones(valor, [4, 4]),
+};
+
 export default function EmployeeForm({
   cargos = [],
   sucursales = [],
@@ -45,7 +63,10 @@ export default function EmployeeForm({
     setForm(aFormulario(empleadoEditar));
   }, [empleadoEditar]);
 
-  const cambiar = (campo) => (event) => setForm({ ...form, [campo]: event.target.value });
+  const cambiar = (campo) => (event) => {
+    const { value } = event.target;
+    setForm({ ...form, [campo]: FORMATOS[campo] ? FORMATOS[campo](value) : value });
+  };
 
   const duiValido = /^\d{8}-\d$/.test(form.dui.trim());
   const nitLimpio = form.nit.trim();
@@ -53,6 +74,8 @@ export default function EmployeeForm({
   const salarioValido = isValidAmount(form.salarioUsd) && Number(form.salarioUsd) > 0;
   const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(form.fechaIngreso.trim());
 
+  const telefonoValido = !form.telefono.trim() || /^\d{4}-\d{4}$/.test(form.telefono.trim());
+  const correoValido = !form.correo.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo.trim());
   const valido =
     form.nombres.trim().length >= 2 &&
     form.apellidos.trim().length >= 2 &&
@@ -60,7 +83,9 @@ export default function EmployeeForm({
     nitValido &&
     Boolean(form.cargoId) &&
     salarioValido &&
-    fechaValida;
+    fechaValida &&
+    telefonoValido &&
+    correoValido;
 
   async function enviar(event) {
     event.preventDefault();
@@ -112,7 +137,10 @@ export default function EmployeeForm({
                 maxLength={10}
                 value={form.dui}
                 onChange={cambiar('dui')}
+                inputMode="numeric"
+                invalid={form.dui !== '' && !duiValido}
               />
+              <FormFeedback>El DUI debe tener 9 números.</FormFeedback>
             </FormGroup>
           </Col>
           <Col md={6}>
@@ -124,7 +152,10 @@ export default function EmployeeForm({
                 maxLength={17}
                 value={form.nit}
                 onChange={cambiar('nit')}
+                inputMode="numeric"
+                invalid={!nitValido}
               />
+              <FormFeedback>El NIT debe tener 14 números.</FormFeedback>
             </FormGroup>
           </Col>
         </Row>
@@ -184,13 +215,29 @@ export default function EmployeeForm({
           <Col md={6}>
             <FormGroup>
               <Label for="emp-telefono">Teléfono (opcional)</Label>
-              <Input id="emp-telefono" maxLength={20} value={form.telefono} onChange={cambiar('telefono')} />
+              <Input
+                id="emp-telefono"
+                maxLength={20}
+                value={form.telefono}
+                onChange={cambiar('telefono')}
+                inputMode="numeric"
+                invalid={!telefonoValido}
+              />
+              <FormFeedback>El teléfono debe tener 8 números.</FormFeedback>
             </FormGroup>
           </Col>
           <Col md={6}>
             <FormGroup>
               <Label for="emp-correo">Correo (opcional)</Label>
-              <Input id="emp-correo" type="email" maxLength={150} value={form.correo} onChange={cambiar('correo')} />
+              <Input
+                id="emp-correo"
+                type="email"
+                maxLength={150}
+                value={form.correo}
+                onChange={cambiar('correo')}
+                invalid={!correoValido}
+              />
+              <FormFeedback>Escribe un correo válido, por ejemplo nombre@correo.com.</FormFeedback>
             </FormGroup>
           </Col>
         </Row>
