@@ -9,6 +9,7 @@ const {
   anularPedido,
 } = require('../services/pedidoService');
 const { generarPdf } = require('../services/facturacionService');
+const { obtenerAlertasPos } = require('../services/stockService');
 
 async function getCategorias(req, res, next) {
   try {
@@ -29,6 +30,15 @@ async function getProductos(req, res, next) {
     });
 
     res.status(200).json(productos);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Alertas de stock para el POS (las puede ver cualquier rol con acceso al POS, incluido cajero).
+async function getAlertasStock(req, res, next) {
+  try {
+    res.status(200).json(await obtenerAlertasPos());
   } catch (error) {
     next(error);
   }
@@ -147,6 +157,7 @@ async function getComprobantePdf(req, res, next) {
 module.exports = {
   getCategorias,
   getProductos,
+  getAlertasStock,
   getProximoNumero,
   postPedido,
   getPedidos,
