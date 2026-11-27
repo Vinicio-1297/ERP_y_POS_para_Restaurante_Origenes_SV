@@ -8,7 +8,7 @@ import useOrder from '../hooks/useOrder.js';
 import { categories, products } from '../data/mockMenu.js';
 import { formatCents } from '../utils/money.js';
 import { MODULES, canAccessModule } from '../utils/permissions.js';
-import { crearPedido, obtenerProximoNumero } from '../services/pedidoService.js';
+import { abrirPdfPedido, crearPedido, obtenerProximoNumero } from '../services/pedidoService.js';
 import { crearCliente, listarClientes } from '../services/clienteService.js';
 import { getTurnoActual } from '../services/cajaService.js';
 import { obtenerDisponibilidad } from '../services/stockService.js';
@@ -145,6 +145,15 @@ export default function PosPage() {
     return cliente;
   }
 
+  async function handleAbrirPdf(formato) {
+    if (!ultimaVenta) return;
+    try {
+      await abrirPdfPedido(ultimaVenta.id, formato);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleProcessSale() {
     if (saving) return;
     if (estadoCaja !== 'abierta') {
@@ -226,6 +235,14 @@ export default function PosPage() {
         {ultimaVenta && (
           <Alert color="success" toggle={() => setUltimaVenta(null)} fade={false}>
             <div>{ultimaVenta.texto}</div>
+            <div className="pos-sale-actions">
+              <button type="button" onClick={() => handleAbrirPdf('comprobante')}>
+                Ver comprobante (PDF)
+              </button>
+              <button type="button" onClick={() => handleAbrirPdf('ticket')}>
+                Ticket
+              </button>
+            </div>
           </Alert>
         )}
         {error && (

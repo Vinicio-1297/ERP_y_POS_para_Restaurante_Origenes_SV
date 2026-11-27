@@ -178,6 +178,22 @@ async function desactivar(id) {
   return resultado.recordset[0] || null;
 }
 
+// Reactivar proveedor (baja lógica reversible)
+async function activar(id) {
+  const request = await crearRequest();
+
+  request.input('id', sql.Int, id);
+
+  const resultado = await request.query(`
+    UPDATE dbo.proveedores
+    SET activo = 1
+    OUTPUT INSERTED.*
+    WHERE id = @id AND activo = 0;
+  `);
+
+  return resultado.recordset[0] || null;
+}
+
 module.exports = {
   listar,
   obtenerPorId,
@@ -186,4 +202,5 @@ module.exports = {
   crear,
   actualizar,
   desactivar,
+  activar,
 };

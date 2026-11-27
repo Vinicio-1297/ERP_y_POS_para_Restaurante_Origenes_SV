@@ -26,6 +26,7 @@ async function buscar({ categoriaId, textoLike } = {}, transaccion) {
            p.nombre,
            p.precio_cents AS precioCents,
            p.categoria_id AS categoriaId,
+           p.tipo_producto AS tipoProducto,
            p.imagen_url   AS imagenUrl,
            p.sucursal
     FROM dbo.productos p

@@ -23,3 +23,4 @@
 .cmp-actions { display: flex; width: max-content; gap: 8px; flex-wrap: nowrap; }
 
 .cmp-warning { padding: 13px 16px; border: 1px solid #dcbf96; background: #fff2d5; border-radius: 10px; color: #794c36; margin: 4px 0 18px; line-height: 1.5; }
+.cmp-status.cancelled { background:#f6dddd; color:#974a42; }

@@ -87,10 +87,27 @@ async function desactivar(req, res, next) {
   }
 }
 
+// PATCH /proveedores/:id/activar
+async function activar(req, res, next) {
+  try {
+    const { id } = res.locals.validated.params;
+
+    const proveedor = await proveedorService.activar(id);
+
+    res.status(200).json({
+      mensaje: 'Proveedor activado correctamente.',
+      datos: proveedor,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   desactivar,
+  activar,
 };
