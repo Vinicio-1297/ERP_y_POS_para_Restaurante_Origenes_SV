@@ -253,3 +253,5 @@
 .inv-alert-panel .inv-table { min-width: 720px; }
 .inv-alert-panel .inv-table td:last-child, .inv-alert-panel .inv-table th:last-child { min-width: 145px; }
 .inv-alert-panel .inv-primary { white-space: nowrap; padding: 9px 12px; }
+
+.frontb-workspace .inv-notice { color: #34744d; font-weight: 700; margin: 0; }
