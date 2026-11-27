@@ -1,9 +1,3 @@
-import {
-  listarCompras,
-  listarProveedores,
-} from '../services/comprasProveedoresApi.js';
-
-
 function getAuthHeaders() {
   const token =
     sessionStorage.getItem('origenes.token') ||
