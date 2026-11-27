@@ -8,7 +8,14 @@ const {
   planillaIdParamSchema,
   boletaParamsSchema,
 } = require('../schemas/planillaSchemas');
-const { postGenerar, getPlanillas, getPlanilla, getBoleta, getParametros } = require('../controllers/planillaController');
+const {
+  postGenerar,
+  postRecalcular,
+  getPlanillas,
+  getPlanilla,
+  getBoleta,
+  getParametros,
+} = require('../controllers/planillaController');
 
 const router = express.Router();
 
@@ -20,6 +27,14 @@ router.get('/planillas/parametros', authenticate, soloGestion, getParametros);
 router.post('/planillas', authenticate, soloGestion, validate(generarPlanillaSchema), postGenerar);
 router.get('/planillas', authenticate, soloGestion, validate(planillasQuerySchema, 'query'), getPlanillas);
 router.get('/planillas/:id', authenticate, soloGestion, validate(planillaIdParamSchema, 'params'), getPlanilla);
+// Recalcular reemplaza una planilla ya guardada: solo el administrador.
+router.post(
+  '/planillas/:id/recalcular',
+  authenticate,
+  authorize('administrador'),
+  validate(planillaIdParamSchema, 'params'),
+  postRecalcular,
+);
 router.get(
   '/planillas/:id/boletas/:empleadoId',
   authenticate,

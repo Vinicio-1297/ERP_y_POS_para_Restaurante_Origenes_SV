@@ -1,5 +1,6 @@
 const {
   generarPlanilla,
+  recalcularPlanilla,
   listarPlanillas,
   obtenerPlanilla,
   obtenerBoleta,
@@ -14,6 +15,15 @@ function usuarioIdDelToken(req) {
 async function postGenerar(req, res, next) {
   try {
     res.status(201).json(await generarPlanilla(res.locals.validated.body, usuarioIdDelToken(req)));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function postRecalcular(req, res, next) {
+  try {
+    const id = Number(res.locals.validated.params.id);
+    res.status(200).json(await recalcularPlanilla(id, usuarioIdDelToken(req)));
   } catch (error) {
     next(error);
   }
@@ -53,4 +63,4 @@ async function getParametros(req, res, next) {
   }
 }
 
-module.exports = { postGenerar, getPlanillas, getPlanilla, getBoleta, getParametros };  
+module.exports = { postGenerar, postRecalcular, getPlanillas, getPlanilla, getBoleta, getParametros };  

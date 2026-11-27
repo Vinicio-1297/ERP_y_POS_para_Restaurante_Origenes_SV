@@ -42,6 +42,42 @@ function armarPlanilla(planilla, detalle) {
   };
 }
 
+function calcularTotales(lineas) {
+  return {
+    cantidadEmpleados: lineas.length,
+    totalSalarioCents: sumar(lineas, 'salarioQuincenalCents'),
+    totalIsssCents: sumar(lineas, 'isssCents'),
+    totalAfpCents: sumar(lineas, 'afpCents'),
+    totalRentaCents: sumar(lineas, 'rentaCents'),
+    totalLiquidoCents: sumar(lineas, 'netoCents'),
+  };
+}
+
+// Una línea por empleado, con sus datos y descuentos. La usan "generar" y "recalcular".
+async function calcularLineas(periodo, sucursalId, transaccion) {
+  // Los tramos vigentes se leen de la base, no del código.
+  const tramos = await tramoRentaRepository.listarVigentes(periodo.fin, transaccion);
+  if (tramos.length === 0) {
+    throw new Error('No hay tramos de renta configurados. Ejecuta npm run db:rrhh');
+  }
+
+  // Solo empleados activos que ya habían ingresado al terminar la quincena.
+  const activos = await empleadoRepository.listar({ activo: true, sucursalId: sucursalId ?? undefined }, transaccion);
+  const empleados = activos.filter((empleado) => empleado.fechaIngreso <= periodo.fin);
+  if (empleados.length === 0) {
+    throw httpError(409, 'No hay empleados activos para esa quincena');
+  }
+
+  return empleados.map((empleado) => ({
+    empleadoId: empleado.id,
+    nombre: `${empleado.nombres} ${empleado.apellidos}`,
+    dui: empleado.dui,
+    cargo: empleado.cargo,
+    salarioMensualCents: empleado.salarioMensualCents,
+    ...calcularQuincena(empleado.salarioMensualCents, tramos),
+  }));
+}
+
 // Calcula la planilla de una quincena para los empleados activos y la guarda. Todo o nada.
 // Con sucursalId solo incluye a esa sucursal; sin él, a todos los empleados activos.
 async function generarPlanilla({ anio, mes, quincena, sucursalId }, usuarioId) {
@@ -54,27 +90,7 @@ async function generarPlanilla({ anio, mes, quincena, sucursalId }, usuarioId) {
         throw httpError(409, 'Ya existe una planilla para esa quincena');
       }
 
-      // Los tramos vigentes se leen de la base, no del código.
-      const tramos = await tramoRentaRepository.listarVigentes(periodo.fin, transaccion);
-      if (tramos.length === 0) {
-        throw new Error('No hay tramos de renta configurados. Ejecuta npm run db:rrhh');
-      }
-
-      // Solo empleados activos que ya habían ingresado al terminar la quincena.
-      const activos = await empleadoRepository.listar({ activo: true, sucursalId: sucursal ?? undefined }, transaccion);
-      const empleados = activos.filter((empleado) => empleado.fechaIngreso <= periodo.fin);
-      if (empleados.length === 0) {
-        throw httpError(409, 'No hay empleados activos para esa quincena');
-      }
-
-      const lineas = empleados.map((empleado) => ({
-        empleadoId: empleado.id,
-        nombre: `${empleado.nombres} ${empleado.apellidos}`,
-        dui: empleado.dui,
-        cargo: empleado.cargo,
-        salarioMensualCents: empleado.salarioMensualCents,
-        ...calcularQuincena(empleado.salarioMensualCents, tramos),
-      }));
+      const lineas = await calcularLineas(periodo, sucursal, transaccion);
 
       const planillaId = await planillaRepository.insertar(
         {
@@ -84,12 +100,7 @@ async function generarPlanilla({ anio, mes, quincena, sucursalId }, usuarioId) {
           sucursalId: sucursal,
           periodoInicio: periodo.inicio,
           periodoFin: periodo.fin,
-          cantidadEmpleados: lineas.length,
-          totalSalarioCents: sumar(lineas, 'salarioQuincenalCents'),
-          totalIsssCents: sumar(lineas, 'isssCents'),
-          totalAfpCents: sumar(lineas, 'afpCents'),
-          totalRentaCents: sumar(lineas, 'rentaCents'),
-          totalLiquidoCents: sumar(lineas, 'netoCents'),
+          ...calcularTotales(lineas),
           generadaPor: usuarioId,
         },
         transaccion,
@@ -108,6 +119,34 @@ async function generarPlanilla({ anio, mes, quincena, sucursalId }, usuarioId) {
     }
     throw error;
   }
+}
+
+// Vuelve a calcular una planilla ya guardada con los datos ACTUALES de los empleados (altas, bajas
+// y cambios de salario). Conserva el mismo id y reemplaza todo el detalle. Todo o nada.
+async function recalcularPlanilla(id, usuarioId) {
+  return ejecutarEnTransaccion(async (transaccion) => {
+    // Bloquea el encabezado para que dos recálculos de la misma planilla no se crucen.
+    const planilla = await planillaRepository.obtenerParaActualizar(id, transaccion);
+    if (!planilla) {
+      throw httpError(404, 'Planilla no encontrada');
+    }
+
+    const periodo = periodoDeQuincena(planilla.anio, planilla.mes, planilla.quincena);
+    const lineas = await calcularLineas(periodo, planilla.sucursalId, transaccion);
+
+    await planillaRepository.eliminarDetalle(id, transaccion);
+    await planillaRepository.actualizarTotales(
+      id,
+      { ...calcularTotales(lineas), generadaPor: usuarioId },
+      transaccion,
+    );
+
+    for (const linea of lineas) {
+      await planillaRepository.insertarDetalle(id, linea, transaccion);
+    }
+
+    return { id };
+  });
 }
 
 // Historial: una fila por planilla, con el total líquido (lo que se paga).
@@ -187,4 +226,4 @@ async function obtenerParametros() {
   };
 }
 
-module.exports = { generarPlanilla, listarPlanillas, obtenerPlanilla, obtenerBoleta, obtenerParametros };
+module.exports = { generarPlanilla, recalcularPlanilla, listarPlanillas, obtenerPlanilla, obtenerBoleta, obtenerParametros };

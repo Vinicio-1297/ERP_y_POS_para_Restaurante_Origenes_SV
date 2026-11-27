@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Col, FormGroup, Input, Label, Row, Table } from 'reactstrap';
 import { formatUsd } from '../../utils/moneyInput.js';
+import { isAdmin } from '../../utils/permissions.js';
 
 const hoy = new Date();
 const FORM_PLANILLA = {
@@ -125,9 +126,11 @@ export default function PayrollSection({
                 <Button size="sm" color="secondary" outline disabled={enviando} onClick={() => onSeleccionarPlanilla(item.id)}>
                   Ver
                 </Button>
-                <Button size="sm" color="warning" outline className="ms-1" disabled={enviando} onClick={() => onRecalcular(item.id)}>
-                  Recalcular
-                </Button>
+                {isAdmin() && (
+                  <Button size="sm" color="warning" outline className="ms-1" disabled={enviando} onClick={() => onRecalcular(item.id)}>
+                    Recalcular
+                  </Button>
+                )}
               </td>
             </tr>
           ))}

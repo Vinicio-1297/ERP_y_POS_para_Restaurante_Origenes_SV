@@ -108,6 +108,51 @@ async function insertarDetalle(planillaId, linea, transaccion) {
     `);
 }
 
+// Lee el encabezado y lo deja bloqueado hasta que termine la transacción.
+async function obtenerParaActualizar(id, transaccion) {
+  const request = await crearRequest(transaccion);
+  const resultado = await request.input('id', sql.Int, id).query(`
+    SELECT ${COLUMNAS_PLANILLA}
+    FROM dbo.planillas WITH (UPDLOCK, HOLDLOCK)
+    WHERE id = @id
+  `);
+
+  return resultado.recordset[0] ?? null;
+}
+
+async function eliminarDetalle(planillaId, transaccion) {
+  const request = await crearRequest(transaccion);
+  await request
+    .input('planillaId', sql.Int, planillaId)
+    .query('DELETE FROM dbo.planilla_detalle WHERE planilla_id = @planillaId');
+}
+
+// Al recalcular también se actualiza quién la generó y cuándo.
+async function actualizarTotales(id, totales, transaccion) {
+  const request = await crearRequest(transaccion);
+  await request
+    .input('id', sql.Int, id)
+    .input('cantidad', sql.Int, totales.cantidadEmpleados)
+    .input('salario', sql.Int, totales.totalSalarioCents)
+    .input('isss', sql.Int, totales.totalIsssCents)
+    .input('afp', sql.Int, totales.totalAfpCents)
+    .input('renta', sql.Int, totales.totalRentaCents)
+    .input('liquido', sql.Int, totales.totalLiquidoCents)
+    .input('generadaPor', sql.Int, totales.generadaPor ?? null)
+    .query(`
+      UPDATE dbo.planillas
+      SET cantidad_empleados = @cantidad,
+          total_bruto_cents = @salario,
+          total_isss_cents = @isss,
+          total_afp_cents = @afp,
+          total_renta_cents = @renta,
+          total_neto_cents = @liquido,
+          generada_por = @generadaPor,
+          creado_en = SYSUTCDATETIME()
+      WHERE id = @id
+    `);
+}
+
 async function listar(filtros, transaccion) {
   const request = await crearRequest(transaccion);
   const condiciones = ['1 = 1'];
@@ -164,4 +209,15 @@ async function obtenerLineaDetalle(planillaId, empleadoId, transaccion) {
   return resultado.recordset[0] ?? null;
 }
 
-module.exports = { obtenerIdEnConflicto, insertar, insertarDetalle, listar, obtenerPorId, listarDetalle, obtenerLineaDetalle };
+module.exports = {
+  obtenerIdEnConflicto,
+  insertar,
+  insertarDetalle,
+  obtenerParaActualizar,
+  eliminarDetalle,
+  actualizarTotales,
+  listar,
+  obtenerPorId,
+  listarDetalle,
+  obtenerLineaDetalle,
+};
