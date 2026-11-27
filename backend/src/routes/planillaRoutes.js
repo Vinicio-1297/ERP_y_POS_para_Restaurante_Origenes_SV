@@ -8,7 +8,7 @@ const {
   planillaIdParamSchema,
   boletaParamsSchema,
 } = require('../schemas/planillaSchemas');
-const { postGenerar, getPlanillas, getPlanilla, getBoleta, getParametros } = require('../controllers/planillaController');
+const { postGenerar, postRecalcular, getPlanillas, getPlanilla, getBoleta, getParametros } = require('../controllers/planillaController');
 
 const router = express.Router();
 
@@ -17,6 +17,7 @@ const soloGestion = authorize('administrador', 'gerente');
 
 // "parametros" va antes de "/:id" para que no se confunda con un id.
 router.get('/planillas/parametros', authenticate, soloGestion, getParametros);
+router.post('/planillas/recalcular', authenticate, soloGestion, validate(planillaIdParamSchema, 'params'), postRecalcular);
 router.post('/planillas', authenticate, soloGestion, validate(generarPlanillaSchema), postGenerar);
 router.get('/planillas', authenticate, soloGestion, validate(planillasQuerySchema, 'query'), getPlanillas);
 router.get('/planillas/:id', authenticate, soloGestion, validate(planillaIdParamSchema, 'params'), getPlanilla);
