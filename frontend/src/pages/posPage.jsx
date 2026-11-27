@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Alert } from 'reactstrap';
 import CategoryBar from '../components/pos/CategoryBar.jsx';
@@ -7,38 +7,39 @@ import ProductCard from '../components/pos/ProductCard.jsx';
 import useOrder from '../hooks/useOrder.js';
 import { categories, products } from '../data/mockMenu.js';
 import { formatCents } from '../utils/money.js';
+import { MODULES, canAccessModule } from '../utils/permissions.js';
 import { crearPedido, obtenerProximoNumero } from '../services/pedidoService.js';
-import { listarClientes } from '../services/clienteService.js';
+import { crearCliente, listarClientes } from '../services/clienteService.js';
 import { getTurnoActual } from '../services/cajaService.js';
-import { inventarioService, recetasService } from '../services/frontbRepos.js';
+import { obtenerDisponibilidad } from '../services/stockService.js';
 
 // Normaliza para que "te" encuentre "Té" al buscar.
 const normalize = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-function verificarStockDisponible(product, itemsActuales) {
+const MAX_ALERTAS_VISIBLES = 5;
+const REFRESCO_STOCK_MS = 60_000;
+const SIN_STOCK = { productos: [], insumos: [] };
+
+const formatQty = (value) => Number(value).toLocaleString('es-SV', { maximumFractionDigits: 3 });
+
+// Revisa con los datos del backend si se puede agregar una unidad más.
+// Sin datos del producto no bloquea: el servidor vuelve a validar el stock al vender.
+function verificarStock(product, itemsActuales, stockPorProducto) {
+  const info = stockPorProducto.get(Number(product.id));
+  if (!info) return null;
+
+  if (info.estado === 'sin-receta') {
+    return `"${product.name}" no tiene una receta activa, no se puede vender.`;
+  }
+
   const cantidadDeseada = (itemsActuales.find((i) => i.id === product.id)?.quantity || 0) + 1;
+  if (cantidadDeseada <= info.disponible) return null;
 
-  const stockDirecto = product.stock ?? product.stockDisponible;
-  if (typeof stockDirecto === 'number' && cantidadDeseada > stockDirecto) {
-    return `Stock insuficiente para "${product.name}". Disponible: ${stockDirecto} u.`;
+  if (info.disponible < 1) {
+    const falta = info.insumoLimitante ? ` Falta ${info.insumoLimitante.nombre}.` : '';
+    return `"${product.name}" está agotado.${falta}`;
   }
-
-  const recetas = recetasService.list();
-  const receta = recetas.find((r) => String(r.productoId) === String(product.id));
-  if (receta && Array.isArray(receta.ingredientes) && receta.ingredientes.length > 0) {
-    const inventario = inventarioService.list();
-    const rendimiento = Number(receta.rendimiento) || 1;
-    for (const ing of receta.ingredientes) {
-      const insumo = inventario.find((inv) => String(inv.id) === String(ing.insumoId));
-      if (!insumo) continue;
-      const requerido = (Number(ing.cantidad) / rendimiento) * cantidadDeseada;
-      if (requerido > Number(insumo.stock)) {
-        return `Insumo insuficiente (${insumo.nombre}) para preparar "${product.name}". Stock actual: ${insumo.stock} ${insumo.unidad}.`;
-      }
-    }
-  }
-
-  return null;
+  return `Stock insuficiente para "${product.name}". Disponible: ${info.disponible} u.`;
 }
 
 export default function PosPage() {
@@ -46,11 +47,12 @@ export default function PosPage() {
   const order = useOrder();
   const [category, setCategory] = useState('todos');
   const [orderNumber, setOrderNumber] = useState('0001');
-  const [notice, setNotice] = useState(null);
+  const [ultimaVenta, setUltimaVenta] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [clientes, setClientes] = useState([]);
   const [estadoCaja, setEstadoCaja] = useState('verificando');
+  const [stock, setStock] = useState(SIN_STOCK);
 
   const visibleProducts = useMemo(() => {
     const term = normalize(search.trim());
@@ -61,6 +63,11 @@ export default function PosPage() {
     );
   }, [category, search]);
 
+  const stockPorProducto = useMemo(
+    () => new Map(stock.productos.map((p) => [p.productoId, p])),
+    [stock],
+  );
+
   async function cargarProximoNumero() {
     try {
       setOrderNumber(await obtenerProximoNumero());
@@ -69,9 +76,29 @@ export default function PosPage() {
     }
   }
 
+  // Las alertas son informativas: si la consulta falla se deja lo último que había,
+  // porque el servidor igual valida el stock al registrar la venta.
+  const cargarStock = useCallback(async (signal) => {
+    try {
+      setStock(await obtenerDisponibilidad(signal));
+    } catch {
+      // sin acción
+    }
+  }, []);
+
   useEffect(() => {
     cargarProximoNumero();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    cargarStock(controller.signal);
+    const timer = setInterval(() => cargarStock(controller.signal), REFRESCO_STOCK_MS);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [cargarStock]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,7 +129,7 @@ export default function PosPage() {
 
   function handleAddProduct(product) {
     setError(null);
-    const errorStock = verificarStockDisponible(product, order.items);
+    const errorStock = verificarStock(product, order.items, stockPorProducto);
     if (errorStock) {
       setError(errorStock);
       return;
@@ -110,8 +137,15 @@ export default function PosPage() {
     order.addProduct(product);
   }
 
+  // Alta rápida de un cliente con datos fiscales: queda en la lista y seleccionado.
+  async function handleCrearCliente(datos) {
+    const cliente = await crearCliente(datos);
+    setClientes((lista) => [...lista, cliente]);
+    order.setClienteId(cliente.id);
+    return cliente;
+  }
 
- async function handleProcessSale() {
+  async function handleProcessSale() {
     if (saving) return;
     if (estadoCaja !== 'abierta') {
       setError('No puedes procesar ventas porque la caja está cerrada. Abre un turno primero.');
@@ -128,19 +162,27 @@ export default function PosPage() {
         ...(order.receiptType === 'credito-fiscal' && { clienteId: order.clienteId }),
         items: order.items.map((item) => ({ productoId: item.id, cantidad: item.quantity })),
       });
-      const correlativo = pedido.correlativo || pedido.numeroComprobante;
-      setNotice(
-        `Venta #${pedido.numero}${correlativo ? ` (${correlativo})` : ''} registrada por $ ${formatCents(pedido.totalCents)}`,
-      );
+      const etiqueta = pedido.tipoComprobante === 'credito-fiscal' ? 'CCF' : 'Factura';
+      setUltimaVenta({
+        id: pedido.id,
+        texto: `Venta #${pedido.numero} · ${etiqueta} ${pedido.numeroComprobante} registrada por $ ${formatCents(pedido.totalCents)}`,
+      });
       order.clearOrder();
       cargarProximoNumero();
+      cargarStock();
     } catch (err) {
-      setNotice(null);
+      setUltimaVenta(null);
       setError(err.message);
+      // Si el servidor rechazó por stock, las alertas en pantalla ya estaban desactualizadas.
+      cargarStock();
     } finally {
       setSaving(false);
     }
   }
+
+  const alertasVisibles = stock.insumos.slice(0, MAX_ALERTAS_VISIBLES);
+  const alertasOcultas = stock.insumos.length - alertasVisibles.length;
+  const hayAgotados = stock.insumos.some((insumo) => insumo.estado === 'agotado');
 
   return (
     <div className="pos-page">
@@ -155,9 +197,35 @@ export default function PosPage() {
           </Alert>
         )}
 
-        {notice && (
-          <Alert color="success" toggle={() => setNotice(null)} fade={false}>
-            {notice}
+        {stock.insumos.length > 0 && (
+          <Alert color={hayAgotados ? 'danger' : 'warning'} fade={false} className="stock-alert">
+            <strong>Alertas de stock ({stock.insumos.length})</strong>
+            <ul>
+              {alertasVisibles.map((insumo) => (
+                <li key={insumo.id}>
+                  {insumo.nombre}:{' '}
+                  {insumo.estado === 'agotado'
+                    ? 'agotado'
+                    : `${formatQty(insumo.cantidad)} ${insumo.unidad} (mínimo ${formatQty(insumo.stockMinimo)})`}
+                </li>
+              ))}
+            </ul>
+            {alertasOcultas > 0 && (
+              <small>
+                y {alertasOcultas} más.{' '}
+                {canAccessModule(MODULES.INVENTARIO) && (
+                  <Link to="/inventario" className="alert-link">
+                    Ver inventario
+                  </Link>
+                )}
+              </small>
+            )}
+          </Alert>
+        )}
+
+        {ultimaVenta && (
+          <Alert color="success" toggle={() => setUltimaVenta(null)} fade={false}>
+            <div>{ultimaVenta.texto}</div>
           </Alert>
         )}
         {error && (
@@ -173,8 +241,13 @@ export default function PosPage() {
           <p className="pos-empty">No hay productos que coincidan.</p>
         ) : (
           <div className="pos-grid">
-           {visibleProducts.map((product) => (
-              <ProductCard key={product.id} product={product} onAdd={handleAddProduct} />
+            {visibleProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onAdd={handleAddProduct}
+                stock={stockPorProducto.get(Number(product.id))}
+              />
             ))}
           </div>
         )}
@@ -188,6 +261,7 @@ export default function PosPage() {
         cajaAbierta={estadoCaja === 'abierta'}
         saving={saving}
         onAddProduct={handleAddProduct}
+        onCrearCliente={handleCrearCliente}
       />
     </div>
   );

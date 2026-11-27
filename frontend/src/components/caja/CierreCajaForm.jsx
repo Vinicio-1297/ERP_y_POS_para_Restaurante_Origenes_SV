@@ -24,7 +24,7 @@ export default function CierreCajaForm({ onCerrar, enviando }) {
       {[
         ['efectivo', 'Efectivo contado (USD)'],
         ['tarjeta', 'Total en tarjetas (USD)'],
-        ['digital', 'Total digital: Bitcoin / Chivo (USD)'],
+        ['digital', 'Total digital (USD)'],
       ].map(([campo, etiqueta]) => (
         <FormGroup key={campo}>
           <Label for={`cierre-${campo}`}>{etiqueta}</Label>

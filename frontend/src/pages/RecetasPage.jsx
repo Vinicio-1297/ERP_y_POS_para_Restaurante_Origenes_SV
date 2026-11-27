@@ -1,25 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { recetasService } from '../services/gestionRepository.js';
-import { listarArticulosParaSeleccion, listarProductosPOS } from '../services/gestionApi.js';
-import { validQuantity, newFrontBId } from '../utils/gestionUtils.js';
+import {
+  listarArticulosParaSeleccion,
+  listarProductosPOS,
+  listarRecetas,
+  crearReceta,
+  actualizarReceta,
+  desactivarReceta,
+} from '../services/gestionApi.js';
+import { validQuantity } from '../utils/gestionUtils.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
 import { canCreate, canEdit, canDelete, MODULES } from '../utils/permissions.js';
 import '../styles/recetas-feature.css';
 
 function freshForm() {
-  return { productoId: '', rendimiento: '1', ingredientes: [] };
+  return {
+    productoId: '',
+    rendimiento: '1',
+    unidadRendimiento: 'porcion',
+    instrucciones: null,
+    ingredientes: [],
+  };
 }
 
 export default function RecetasPage() {
   const puedeCrear = canCreate(MODULES.RECETAS);
   const puedeEditar = canEdit();
   const puedeEliminar = canDelete();
-  const [recetas, setRecetas] = useState(recetasService.list);
+
+  const [recetas, setRecetas] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [posProducts, setPosProducts] = useState([]);
   const [catalogError, setCatalogError] = useState('');
   const [insumosError, setInsumosError] = useState('');
+  const [recetasError, setRecetasError] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
   const [buscar, setBuscar] = useState('');
   const [enfocadaId, setEnfocadaId] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -29,150 +45,661 @@ export default function RecetasPage() {
   const [cantidad, setCantidad] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => { if (puedeCrear || puedeEditar) recetasService.save(recetas); }, [recetas, puedeCrear, puedeEditar]);
+  // consultar las recetas desde el backend
+  async function cargarRecetas(signal) {
+    setCargando(true);
+
+    try {
+      const datos = await listarRecetas(signal);
+      setRecetas(datos);
+      setRecetasError('');
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setRecetasError(err.message);
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setCargando(false);
+      }
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
-    const cargar = () => {
-      listarArticulosParaSeleccion(controller.signal).then(setInsumos).then(() => setInsumosError(''))
-        .catch(err => { if (err.name !== 'AbortError') { setInsumos([]); setInsumosError(err.message); } });
-      listarProductosPOS(controller.signal).then(setPosProducts).then(() => setCatalogError(''))
-        .catch(err => { if (err.name !== 'AbortError') { setPosProducts([]); setCatalogError(err.message); } });
-    };
-    cargar();
-    window.addEventListener('focus', cargar);
-    return () => { controller.abort(); window.removeEventListener('focus', cargar); };
+
+    listarArticulosParaSeleccion(controller.signal)
+      .then(setInsumos)
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          setInsumosError(err.message);
+        }
+      });
+
+    listarProductosPOS(controller.signal)
+      .then(setPosProducts)
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          setCatalogError(err.message);
+        }
+      });
+
+    cargarRecetas(controller.signal);
+
+    return () => controller.abort();
   }, []);
-  const close = () => { setVisible(false); setError(''); };
+
+  const close = () => {
+    if (guardando) return;
+    setVisible(false);
+    setError('');
+  };
+
   const dialogRef = useGestionModal(visible, close);
 
-  const disponibles = useMemo(() => insumos.filter(i => i.tipo === 'insumo'), [insumos]);
-  const porId = useMemo(() => new Map(posProducts.map(p => [String(p.id), p])), [posProducts]);
-  const insumosPorId = useMemo(() => new Map(disponibles.map(i => [String(i.id), i])), [disponibles]);
+  const disponibles = useMemo(
+    () => insumos.filter(i => i.tipo === 'insumo' && i.activo !== false),
+    [insumos]
+  );
+
+  const porId = useMemo(
+    () => new Map(posProducts.map(p => [String(p.id), p])),
+    [posProducts]
+  );
+
+  const insumosPorId = useMemo(
+    () => new Map(disponibles.map(i => [String(i.id), i])),
+    [disponibles]
+  );
+
   const filtradas = useMemo(() => recetas.filter(r => {
     const p = porId.get(String(r.productoId));
-    return (p?.name || '').toLowerCase().includes(buscar.trim().toLowerCase());
+
+    return (p?.name || '')
+      .toLowerCase()
+      .includes(buscar.trim().toLowerCase());
   }), [recetas, buscar, porId]);
 
   function abrir(receta = null) {
     if (receta ? !puedeEditar : !puedeCrear) return;
+
     setEditingId(receta?.id || null);
-    setForm(receta ? { productoId: String(receta.productoId), rendimiento: String(receta.rendimiento), ingredientes: receta.ingredientes.map(i => ({ ...i })) } : freshForm());
-    setInsumoId(''); setCantidad(''); setError('');
-    listarArticulosParaSeleccion().then(setInsumos).then(() => setInsumosError(''))
-      .catch(err => { setInsumos([]); setInsumosError(err.message); });
+
+    setForm(receta ? {
+      productoId: String(receta.productoId),
+      rendimiento: String(receta.rendimiento),
+      unidadRendimiento: receta.unidadRendimiento || 'porcion',
+      instrucciones: receta.instrucciones ?? null,
+      ingredientes: receta.ingredientes.map(i => ({ ...i })),
+    } : freshForm());
+
+    setInsumoId('');
+    setCantidad('');
+    setError('');
     setVisible(true);
   }
 
   function agregar() {
+    if (guardando) return;
     if (!(editingId ? puedeEditar : puedeCrear)) return;
+
     const item = insumosPorId.get(insumoId);
     const qty = Number(cantidad);
+
     if (!item || !validQuantity(cantidad, item?.unidad)) {
-      setError('Seleccioná un insumo disponible e indicá una cantidad mayor que cero.'); return;
+      setError('Selecciona un insumo y una cantidad valida.');
+      return;
     }
-    if (form.ingredientes.some(i => String(i.insumoId) === String(item.id))) {
-      setError('Ese insumo ya está en esta receta.'); return;
+
+    if (form.ingredientes.some(i =>
+      String(i.insumoId) === String(item.id)
+    )) {
+      setError('Ese insumo ya esta en esta receta.');
+      return;
     }
-    setForm(old => ({ ...old, ingredientes: [...old.ingredientes, { insumoId: String(item.id), cantidad: qty, unidad: item.unidad }] }));
-    setInsumoId(''); setCantidad(''); setError('');
+
+    setForm(old => ({
+      ...old,
+      ingredientes: [
+        ...old.ingredientes,
+        {
+          insumoId: String(item.id),
+          cantidad: qty,
+          unidad: item.unidad,
+        },
+      ],
+    }));
+
+    setInsumoId('');
+    setCantidad('');
+    setError('');
   }
 
-  function guardar(event) {
+  // guardar la receta mediante la API
+  async function guardar(event) {
     event.preventDefault();
+
+    if (guardando) return;
     if (!(editingId ? puedeEditar : puedeCrear)) return;
+
     const id = String(form.productoId);
     const rendimiento = Number(form.rendimiento);
-    if (!porId.has(id)) { setError('Seleccioná un producto del catálogo del POS.'); return; }
-    if (!Number.isInteger(rendimiento) || rendimiento <= 0) { setError('El rendimiento debe ser un entero positivo.'); return; }
-    if (recetas.some(r => String(r.productoId) === id && r.id !== editingId)) {
-      setError('Ya existe una receta para este producto. Editá la anterior.'); return;
+
+    if (!porId.has(id)) {
+      setError('Selecciona un producto del POS.');
+      return;
     }
-    if (form.ingredientes.some(i => !insumosPorId.has(String(i.insumoId)))) {
-      setError('Hay ingredientes que ya no existen en Inventario. Revisá la receta.'); return;
+
+    if (!Number.isInteger(rendimiento) || rendimiento <= 0) {
+      setError('El rendimiento debe ser un entero positivo.');
+      return;
     }
-    if (!form.ingredientes.length) { setError('Agregá al menos un ingrediente antes de guardar la receta.'); return; }
-    if (form.ingredientes.some(i => !validQuantity(i.cantidad, insumosPorId.get(String(i.insumoId))?.unidad) || i.unidad !== insumosPorId.get(String(i.insumoId))?.unidad)) {
-      setError('Todos los ingredientes deben tener cantidades válidas y positivas.'); return;
+
+    if (recetas.some(r =>
+      String(r.productoId) === id && r.id !== editingId
+    )) {
+      setError('Ya existe una receta para este producto.');
+      return;
     }
-    const saved = { id: editingId || newFrontBId('rec'), productoId: id, rendimiento, ingredientes: form.ingredientes };
-    setRecetas(old => editingId ? old.map(r => r.id === editingId ? saved : r) : [...old, saved]);
-    setVisible(false);
+
+    if (!form.ingredientes.length) {
+      setError('Agrega al menos un ingrediente.');
+      return;
+    }
+
+    if (form.ingredientes.some(i =>
+      !insumosPorId.has(String(i.insumoId)) ||
+      !validQuantity(
+        i.cantidad,
+        insumosPorId.get(String(i.insumoId))?.unidad
+      ) ||
+      i.unidad !== insumosPorId.get(String(i.insumoId))?.unidad
+    )) {
+      setError('Hay ingredientes o cantidades invalidas.');
+      return;
+    }
+
+    const datos = {
+      productoId: Number(id),
+      rendimiento,
+      unidadRendimiento: form.unidadRendimiento,
+      instrucciones: form.instrucciones,
+      ingredientes: form.ingredientes.map(i => ({
+        insumoId: Number(i.insumoId),
+        cantidad: Number(i.cantidad),
+        unidad: i.unidad,
+      })),
+    };
+
+    setGuardando(true);
+    setError('');
+
+    try {
+      if (editingId) {
+        await actualizarReceta(editingId, datos);
+      } else {
+        await crearReceta(datos);
+      }
+
+      setVisible(false);
+      await cargarRecetas();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  function eliminar(receta) {
-    if (!puedeEliminar) return;
-    const nombre = porId.get(String(receta.productoId))?.name || 'este producto';
-    if (window.confirm(`¿Eliminar la receta de ${nombre}?`)) setRecetas(old => old.filter(r => r.id !== receta.id));
+  // desactivar la receta mediante la API
+  async function eliminar(receta) {
+    if (!puedeEliminar || guardando) return;
+
+    const nombre =
+      porId.get(String(receta.productoId))?.name || 'este producto';
+
+    if (!window.confirm(`¿Eliminar la receta de ${nombre}?`)) {
+      return;
+    }
+
+    setGuardando(true);
+
+    try {
+      await desactivarReceta(receta.id);
+
+      if (enfocadaId === receta.id) {
+        setEnfocadaId(null);
+      }
+
+      await cargarRecetas();
+    } catch (err) {
+      setRecetasError(err.message);
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  const sinReceta = posProducts.filter(p => !recetas.some(r => String(r.productoId) === String(p.id)));
-  const completas = recetas.filter(r => r.ingredientes.length > 0).length;
-  const recetaEnfocada = filtradas.find(r => String(r.id) === String(enfocadaId)) || filtradas[0] || null;
-  const productoEnfocado = recetaEnfocada ? porId.get(String(recetaEnfocada.productoId)) : null;
-  return (
+  const sinReceta = posProducts.filter(p =>
+    !recetas.some(r =>
+      String(r.productoId) === String(p.id)
+    )
+  );
+
+  const completas = recetas.filter(
+    r => r.ingredientes.length > 0
+  ).length;
+
+  const recetaEnfocada =
+    filtradas.find(r =>
+      String(r.id) === String(enfocadaId)
+    ) || filtradas[0] || null;
+
+  const productoEnfocado = recetaEnfocada
+    ? porId.get(String(recetaEnfocada.productoId))
+    : null;
+      return (
     <div className="frontb-workspace">
       <GestionNav />
       <section className="rec-page">
-      <header className="rec-header">
-        <div><h1>Recetas</h1></div>
-        {puedeCrear && <button type="button" className="rec-primary" disabled={!posProducts.length || !!insumosError} onClick={() => abrir()}>+ Nueva receta</button>}
-      </header>
-      <div className="rec-stats">
-        <article><span>Recetas registradas</span><strong>{recetas.length}</strong></article>
-        <article><span>Con ingredientes</span><strong>{completas}</strong></article>
-        <article><span>Productos sin receta</span><strong>{sinReceta.length}</strong></article>
-      </div>
-      {catalogError && <p className="rec-error" role="alert">No se pudo cargar el catálogo del POS: {catalogError}</p>}
-      {insumosError && <p className="rec-error" role="alert">No se pudo cargar Inventario: {insumosError}</p>}
-      {sinReceta.length > 0 && <p className="rec-notice">Productos del menú sin receta: {sinReceta.map(p => p.name).join(', ')}.</p>}
-      <div className="frontb-split frontb-split--recipes">
-      <div className="rec-panel">
-        <div className="rec-panel-head"><div><h2>Listado de recetas</h2></div><input type="search" aria-label="Buscar recetas" placeholder="Buscar producto..." value={buscar} onChange={e => setBuscar(e.target.value)} /></div>
-        <div className="rec-table-wrap"><table><thead><tr><th>PRODUCTOS</th><th>CATEGORÍA</th><th>RENDIMIENTO</th><th>INGREDIENTES</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
-          <tbody>{filtradas.map(r => {
-            const p = porId.get(String(r.productoId));
-            return <tr key={r.id} className={recetaEnfocada?.id === r.id ? 'frontb-row-selected' : ''}><td><strong>{p?.name || `Producto #${r.productoId}`}</strong></td><td>{p?.category || '—'}</td><td>{r.rendimiento} porción(es)</td><td>{r.ingredientes.length}</td><td><span className={`rec-status ${r.ingredientes.length ? 'ok' : 'pending'}`}>{r.ingredientes.length ? 'Con ingredientes' : 'Pendiente'}</span></td><td><button type="button" className="rec-link frontb-row-view" aria-label={`Ver detalle de ${p?.name || `Producto #${r.productoId}`}`} aria-pressed={recetaEnfocada?.id === r.id} onClick={() => setEnfocadaId(r.id)}>Ver</button>{puedeEditar && <button type="button" className="rec-link" onClick={() => abrir(r)}>Editar</button>}{puedeEliminar && <button type="button" className="rec-link rec-danger" onClick={() => eliminar(r)}>Eliminar</button>}</td></tr>;
-          })}</tbody></table></div>
-        {!filtradas.length && <p className="rec-empty">{buscar ? 'No hay recetas con ese nombre.' : 'Todavía no hay recetas. Creá la primera para empezar.'}</p>}
-      </div>
-      <aside className="rec-panel frontb-detail-panel">
-        <span className="frontb-detail-kicker">DETALLE DE RECETA</span>
-        {recetaEnfocada ? <>
-          <h2>{productoEnfocado?.name || `Producto #${recetaEnfocada.productoId}`}</h2>
-          
-          <div className="frontb-detail-highlight"><small>RENDIMIENTO</small><strong>{recetaEnfocada.rendimiento} porción(es)</strong><small>{recetaEnfocada.ingredientes.length} ingredientes</small></div>
-          <h3>Ingredientes y cantidades</h3>
-          <ul className="frontb-detail-list">{recetaEnfocada.ingredientes.map(i => <li key={i.insumoId}><span>{insumosPorId.get(String(i.insumoId))?.nombre || 'Insumo no disponible'}</span><strong>{i.cantidad} {i.unidad}</strong></li>)}</ul>
-          {puedeEditar && <button type="button" className="rec-primary frontb-detail-action" onClick={() => abrir(recetaEnfocada)}>Editar receta</button>}
-        </> : <p className="frontb-empty-side">Seleccioná una receta para ver su detalle.</p>}
-      </aside>
-      </div>
-      {visible && <div className="rec-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
-        <div className="rec-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingId ? 'Editar receta' : 'Nueva receta'}>
-          <div className="rec-dialog-head"><h2>{editingId ? 'Editar receta' : 'Nueva receta'}</h2><button type="button" className="rec-close" aria-label="Cerrar" onClick={close}>×</button></div>
-          <form onSubmit={guardar} className="rec-form">
-            <label>Producto<select required value={form.productoId} onChange={e => setForm(old => ({ ...old, productoId: e.target.value }))}>
-              <option value="">Seleccioná un producto...</option>
-              {posProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select></label>
-            <label>Rendimiento (porciones)<input required type="number" min="1" step="1" value={form.rendimiento} onChange={e => setForm(old => ({ ...old, rendimiento: e.target.value }))}/></label>
-            <div className="rec-ingredients">
-              <h3>Ingredientes por receta</h3>
-              {!disponibles.length && <p className="rec-hint">No hay insumos disponibles. Primero registrá insumos en Inventario para crear una receta.</p>}
-              <div className="rec-add-row">
-                <label>Insumo<select value={insumoId} onChange={e => setInsumoId(e.target.value)} disabled={!disponibles.length}>
-                  <option value="">Seleccioná un insumo...</option>{disponibles.map(i => <option key={i.id} value={i.id}>{i.nombre} ({i.unidad})</option>)}
-                </select></label>
-                <label>Cantidad<input type="number" min="0" step={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : 'any'} placeholder="Cantidad" value={cantidad} onChange={e => setCantidad(e.target.value)} disabled={!disponibles.length}/></label>
-                <button type="button" className="rec-secondary" disabled={!disponibles.length} onClick={agregar}>Añadir</button>
-              </div>
-              <ul className="rec-list">{form.ingredientes.map(i => <li key={i.insumoId}><span>{insumosPorId.get(String(i.insumoId))?.nombre || 'Insumo no disponible'} — {i.cantidad} {i.unidad}</span><button type="button" className="rec-link rec-danger" onClick={() => setForm(old => ({ ...old, ingredientes: old.ingredientes.filter(x => x.insumoId !== i.insumoId) }))}>Quitar</button></li>)}</ul>
-            </div>
-            {error && <p role="alert" className="rec-error">{error}</p>}
-            <div className="rec-actions"><button type="button" className="rec-secondary" onClick={close}>Cancelar</button><button type="submit" className="rec-primary">Guardar receta</button></div>
-          </form>
+        <header className="rec-header">
+          <div><h1>Recetas</h1></div>
+          {puedeCrear && (
+            <button
+              type="button"
+              className="rec-primary"
+              disabled={!posProducts.length || !!insumosError || !!recetasError || cargando || guardando}
+              onClick={() => abrir()}
+            >
+              + Nueva receta
+            </button>
+          )}
+        </header>
+
+        <div className="rec-stats">
+          <article>
+            <span>Recetas registradas</span>
+            <strong>{cargando || recetasError ? '—' : recetas.length}</strong>
+          </article>
+          <article>
+            <span>Con ingredientes</span>
+            <strong>{cargando || recetasError ? '—' : completas}</strong>
+          </article>
+          <article>
+            <span>Productos sin receta</span>
+            <strong>{cargando || recetasError || catalogError ? '—' : sinReceta.length}</strong>
+          </article>
         </div>
-      </div>}
+
+        {catalogError && (
+          <p className="rec-error" role="alert">
+            No se pudo cargar el catalogo: {catalogError}
+          </p>
+        )}
+
+        {insumosError && (
+          <p className="rec-error" role="alert">
+            No se pudo cargar Inventario: {insumosError}
+          </p>
+        )}
+
+        {recetasError && (
+          <p className="rec-error" role="alert">
+            Error de recetas: {recetasError}
+          </p>
+        )}
+
+        {cargando && (
+          <p className="rec-notice">Cargando recetas...</p>
+        )}
+
+        {!cargando && !recetasError && !catalogError && sinReceta.length > 0 && (
+          <p className="rec-notice">
+            Productos sin receta: {sinReceta.map(p => p.name).join(', ')}.
+          </p>
+        )}
+
+        <div className="frontb-split frontb-split--recipes">
+          <div className="rec-panel">
+            <div className="rec-panel-head">
+              <div><h2>Listado de recetas</h2></div>
+              <input
+                type="search"
+                aria-label="Buscar recetas"
+                placeholder="Buscar producto..."
+                value={buscar}
+                onChange={e => setBuscar(e.target.value)}
+              />
+            </div>
+
+            <div className="rec-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>PRODUCTOS</th>
+                    <th>CATEGORÍA</th>
+                    <th>RENDIMIENTO</th>
+                    <th>INGREDIENTES</th>
+                    <th>ESTADO</th>
+                    <th>ACCIONES</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtradas.map(r => {
+                    const p = porId.get(String(r.productoId));
+
+                    return (
+                      <tr
+                        key={r.id}
+                        className={recetaEnfocada?.id === r.id ? 'frontb-row-selected' : ''}
+                      >
+                        <td>
+                          <strong>{p?.name || `Producto #${r.productoId}`}</strong>
+                        </td>
+                        <td>{p?.category || '—'}</td>
+                        <td>{r.rendimiento} {r.unidadRendimiento}</td>
+                        <td>{r.ingredientes.length}</td>
+                        <td>
+                          <span className={`rec-status ${r.ingredientes.length ? 'ok' : 'pending'}`}>
+                            {r.ingredientes.length ? 'Con ingredientes' : 'Pendiente'}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="rec-link frontb-row-view"
+                            aria-pressed={recetaEnfocada?.id === r.id}
+                            onClick={() => setEnfocadaId(r.id)}
+                          >
+                            Ver
+                          </button>
+
+                          {puedeEditar && (
+                            <button
+                              type="button"
+                              className="rec-link"
+                              disabled={guardando || !!recetasError}
+                              onClick={() => abrir(r)}
+                            >
+                              Editar
+                            </button>
+                          )}
+
+                          {puedeEliminar && (
+                            <button
+                              type="button"
+                              className="rec-link rec-danger"
+                              disabled={guardando || !!recetasError}
+                              onClick={() => eliminar(r)}
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {!cargando && !recetasError && !filtradas.length && (
+              <p className="rec-empty">
+                {buscar
+                  ? 'No hay recetas con ese nombre.'
+                  : 'Todavía no hay recetas registradas.'}
+              </p>
+            )}
+          </div>
+
+          <aside className="rec-panel frontb-detail-panel">
+            <span className="frontb-detail-kicker">DETALLE DE RECETA</span>
+
+            {recetaEnfocada ? (
+              <>
+                <h2>
+                  {productoEnfocado?.name || `Producto #${recetaEnfocada.productoId}`}
+                </h2>
+
+                <div className="frontb-detail-highlight">
+                  <small>RENDIMIENTO</small>
+                  <strong>
+                    {recetaEnfocada.rendimiento} {recetaEnfocada.unidadRendimiento}
+                  </strong>
+                  <small>{recetaEnfocada.ingredientes.length} ingredientes</small>
+                </div>
+
+                <h3>Ingredientes y cantidades</h3>
+
+                <ul className="frontb-detail-list">
+                  {recetaEnfocada.ingredientes.map(i => (
+                    <li key={i.insumoId}>
+                      <span>
+                        {insumosPorId.get(String(i.insumoId))?.nombre || 'Insumo no disponible'}
+                      </span>
+                      <strong>{i.cantidad} {i.unidad}</strong>
+                    </li>
+                  ))}
+                </ul>
+
+                {recetaEnfocada.instrucciones && (
+                  <>
+                    <h3>Instrucciones</h3>
+                    <p>{recetaEnfocada.instrucciones}</p>
+                  </>
+                )}
+
+                {puedeEditar && (
+                  <button
+                    type="button"
+                    className="rec-primary frontb-detail-action"
+                    disabled={guardando || !!recetasError}
+                    onClick={() => abrir(recetaEnfocada)}
+                  >
+                    Editar receta
+                  </button>
+                )}
+              </>
+            ) : (
+              <p className="frontb-empty-side">
+                Selecciona una receta para ver su detalle.
+              </p>
+            )}
+          </aside>
+        </div>
+
+        {visible && (
+          <div
+            className="rec-overlay"
+            role="presentation"
+            onMouseDown={e => {
+              if (e.target === e.currentTarget) close();
+            }}
+          >
+            <div
+              className="rec-dialog"
+              ref={dialogRef}
+              tabIndex={-1}
+              role="dialog"
+              aria-modal="true"
+              aria-label={editingId ? 'Editar receta' : 'Nueva receta'}
+            >
+              <div className="rec-dialog-head">
+                <h2>{editingId ? 'Editar receta' : 'Nueva receta'}</h2>
+                <button
+                  type="button"
+                  className="rec-close"
+                  aria-label="Cerrar"
+                  disabled={guardando}
+                  onClick={close}
+                >
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={guardar} className="rec-form">
+                <label>
+                  Producto
+                  <select
+                    required
+                    value={form.productoId}
+                    disabled={guardando}
+                    onChange={e => setForm(old => ({
+                      ...old,
+                      productoId: e.target.value,
+                    }))}
+                  >
+                    <option value="">Selecciona un producto...</option>
+                    {posProducts.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Rendimiento
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.rendimiento}
+                    disabled={guardando}
+                    onChange={e => setForm(old => ({
+                      ...old,
+                      rendimiento: e.target.value,
+                    }))}
+                  />
+                </label>
+
+                <label>
+                  Unidad de rendimiento
+                  <select
+                    value={form.unidadRendimiento}
+                    disabled={guardando}
+                    onChange={e => setForm(old => ({
+                      ...old,
+                      unidadRendimiento: e.target.value,
+                    }))}
+                  >
+                    <option value="porcion">Porción</option>
+                    <option value="unidad">Unidad</option>
+                    <option value="lote">Lote</option>
+                  </select>
+                </label>
+
+                <label>
+                  Instrucciones
+                  <textarea
+                    value={form.instrucciones ?? ''}
+                    maxLength={5000}
+                    disabled={guardando}
+                    onChange={e => setForm(old => ({
+                      ...old,
+                      instrucciones: e.target.value || null,
+                    }))}
+                  />
+                </label>
+
+                <div className="rec-ingredients">
+                  <h3>Ingredientes por receta</h3>
+
+                  {!disponibles.length && (
+                    <p className="rec-hint">
+                      No hay insumos disponibles.
+                    </p>
+                  )}
+
+                  <div className="rec-add-row">
+                    <label>
+                      Insumo
+                      <select
+                        value={insumoId}
+                        disabled={!disponibles.length || guardando}
+                        onChange={e => setInsumoId(e.target.value)}
+                      >
+                        <option value="">Selecciona un insumo...</option>
+                        {disponibles.map(i => (
+                          <option key={i.id} value={i.id}>
+                            {i.nombre} ({i.unidad})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Cantidad
+                      <input
+                        type="number"
+                        min="0"
+                        step={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : 'any'}
+                        placeholder="Cantidad"
+                        value={cantidad}
+                        disabled={!disponibles.length || guardando}
+                        onChange={e => setCantidad(e.target.value)}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="rec-secondary"
+                      disabled={!disponibles.length || guardando}
+                      onClick={agregar}
+                    >
+                      Añadir
+                    </button>
+                  </div>
+
+                  <ul className="rec-list">
+                    {form.ingredientes.map(i => (
+                      <li key={i.insumoId}>
+                        <span>
+                          {insumosPorId.get(String(i.insumoId))?.nombre || 'Insumo no disponible'}
+                          {' — '}
+                          {i.cantidad} {i.unidad}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="rec-link rec-danger"
+                          disabled={guardando}
+                          onClick={() => setForm(old => ({
+                            ...old,
+                            ingredientes: old.ingredientes.filter(
+                              x => x.insumoId !== i.insumoId
+                            ),
+                          }))}
+                        >
+                          Quitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {error && (
+                  <p role="alert" className="rec-error">{error}</p>
+                )}
+
+                <div className="rec-actions">
+                  <button
+                    type="button"
+                    className="rec-secondary"
+                    disabled={guardando}
+                    onClick={close}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rec-primary"
+                    disabled={guardando || !!insumosError}
+                  >
+                    {guardando ? 'Guardando...' : 'Guardar receta'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

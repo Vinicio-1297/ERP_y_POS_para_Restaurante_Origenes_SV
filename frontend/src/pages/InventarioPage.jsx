@@ -128,6 +128,8 @@ export default function InventarioPage() {
     if (busy || loading || !sucursalId || (!esAdministrador && !product)) return;
     setForm(product ? {
       ...EMPTY_FORM, ...product,
+      // La API devuelve null en los insumos; el formulario necesita texto.
+      codigo: product.codigo ?? '',
       stock: String(product.stock), minimo: String(product.minimo),
       precioVenta: product.tipo === 'reventa' ? String(centsFor(product, 'precioVentaCents', 'precioVenta') / 100) : '',
     } : EMPTY_FORM);
@@ -141,7 +143,7 @@ export default function InventarioPage() {
     if (busy || !sucursalId || (!esAdministrador && !editingId)) return;
     const nombre = form.nombre.trim();
     const categoria = form.categoria.trim();
-    const codigo = form.codigo.trim();
+    const codigo = (form.codigo ?? '').trim();
     const stock = Number(form.stock);
     const minimo = Number(form.minimo);
     const precioVentaCents = form.tipo === 'reventa' ? dollarsToCents(form.precioVenta) : null;

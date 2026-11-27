@@ -1,4 +1,4 @@
--- cargos del personal: barista, cajero, gerente
+-- cargos del personal: cajero y gerente (el cargo Barista ya no se usa)
 if object_id('dbo.cargos', 'U') is null
 begin
     create table dbo.cargos (
