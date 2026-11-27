@@ -1,4 +1,3 @@
-
 const ROLES = {
   ADMIN: 'administrador',
   MANAGER: 'gerente',
@@ -92,13 +91,31 @@ export function canManage() {
   return isAdmin();
 }
 
+// Compras: administrador y gerente reciben; solo el administrador anula.
+export function canReceivePurchases() {
+  return isAdmin() || isManager();
+}
+
+export function canCancelPurchases() {
+  return isAdmin();
+}
+
+// Administrador y gerente pueden registrar abonos.
+export function canRegisterPayments() {
+  return isAdmin() || isManager();
+}
+
 // Permiso para agregar información administrativa.
 export function canCreate(module) {
   if (isAdmin()) return true;
 
   if (
     isManager() &&
-    module === MODULES.INVENTARIO
+    (
+      module === MODULES.INVENTARIO ||
+      module === MODULES.COMPRAS ||
+      module === MODULES.CUENTAS_POR_PAGAR
+    )
   ) {
     return true;
   }
