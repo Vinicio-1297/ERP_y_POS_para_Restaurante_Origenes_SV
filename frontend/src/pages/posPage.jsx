@@ -235,14 +235,6 @@ export default function PosPage() {
         {ultimaVenta && (
           <Alert color="success" toggle={() => setUltimaVenta(null)} fade={false}>
             <div>{ultimaVenta.texto}</div>
-            <div className="pos-sale-actions">
-              <button type="button" onClick={() => handleAbrirPdf('comprobante')}>
-                Ver comprobante (PDF)
-              </button>
-              <button type="button" onClick={() => handleAbrirPdf('ticket')}>
-                Ticket
-              </button>
-            </div>
           </Alert>
         )}
         {error && (
