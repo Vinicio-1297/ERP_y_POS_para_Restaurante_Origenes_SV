@@ -699,3 +699,262 @@ test('rechaza un stock minimo fraccionario por unidad', async () => {
     error => error.status === 400
   );
 });
+
+// pruebas de consumo proporcional de ingredientes por recetas
+
+const movimientoPedidoBase = {
+  insumoId: 1,
+  sucursalId: 1,
+  usuarioId: 7,
+  tipo: 'salida',
+  cantidad: 0.2,
+  referenciaTipo: 'pedido',
+  referenciaId: 120,
+  motivo: 'Consumo de ingredientes por venta'
+};
+
+const { ejecutarEnTransaccion } = require('../src/config/transaccion');
+
+test('permite descontar una fraccion de un insumo por unidad', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  const resultado = await ejecutarEnTransaccion(tx =>
+    aplicarMovimiento(movimientoPedidoBase, tx)
+  );
+
+  assert.equal(resultado.stockAnterior, 10);
+  assert.equal(resultado.stockNuevo, 9.8);
+  assert.equal(estado.existencias[0].cantidad, 9.8);
+  assert.equal(estado.movimientos.length, 1);
+  assert.equal(estado.resultadoTransaccion, 'commit');
+});
+
+test('permite descontar varias fracciones de un ingrediente', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  await ejecutarEnTransaccion(async tx => {
+    for (let i = 0; i < 5; i++) {
+      await aplicarMovimiento(movimientoPedidoBase, tx);
+    }
+  });
+
+  assert.equal(estado.existencias[0].cantidad, 9);
+  assert.equal(estado.movimientos.length, 5);
+  assert.equal(estado.resultadoTransaccion, 'commit');
+});
+
+test('permite devolver una fraccion de un ingrediente al anular una venta', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 9.8
+  });
+
+  const resultado = await ejecutarEnTransaccion(tx =>
+    aplicarMovimiento({
+      ...movimientoPedidoBase,
+      tipo: 'devolucion',
+      motivo: 'Devolucion de ingredientes por anulacion'
+    }, tx)
+  );
+
+  assert.equal(resultado.stockAnterior, 9.8);
+  assert.equal(resultado.stockNuevo, 10);
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos[0].tipo, 'devolucion');
+  assert.equal(estado.resultadoTransaccion, 'commit');
+});
+
+test('una venta y su devolucion restauran exactamente las existencias', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  await ejecutarEnTransaccion(tx =>
+    aplicarMovimiento({
+      ...movimientoPedidoBase,
+      cantidad: 0.6
+    }, tx)
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 9.4);
+
+  await ejecutarEnTransaccion(tx =>
+    aplicarMovimiento({
+      ...movimientoPedidoBase,
+      tipo: 'devolucion',
+      cantidad: 0.6
+    }, tx)
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 2);
+});
+
+test('rechaza consumir una fraccion cuando no hay existencias suficientes', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 0.1
+  });
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento(movimientoPedidoBase, tx)
+    ),
+    error => error.status === 409
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 0.1);
+  assert.equal(estado.movimientos.length, 0);
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+});
+
+test('permite consumir exactamente la fraccion restante de un insumo', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 0.2
+  });
+
+  const resultado = await ejecutarEnTransaccion(tx =>
+    aplicarMovimiento(movimientoPedidoBase, tx)
+  );
+
+  assert.equal(resultado.stockNuevo, 0);
+  assert.equal(estado.existencias[0].cantidad, 0);
+  assert.equal(estado.resultadoTransaccion, 'commit');
+});
+
+test('rechaza consumos de recetas con mas de tres decimales', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento({
+        ...movimientoPedidoBase,
+        cantidad: 0.1234
+      }, tx)
+    ),
+    error => error.status === 400
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+});
+
+test('rechaza ajustes manuales de salida con unidades fraccionarias', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  await assert.rejects(
+    registrarAjuste(1, {
+      ...ajusteBase,
+      tipo: 'ajuste_salida',
+      cantidad: 0.2
+    }, 7),
+    error => error.status === 400
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+});
+
+test('rechaza entradas de compras con unidades fraccionarias', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento({
+        ...movimientoPedidoBase,
+        tipo: 'entrada',
+        referenciaTipo: 'compra',
+        referenciaId: 1,
+        cantidad: 0.5
+      }, tx)
+    ),
+    error => error.status === 400
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+});
+
+test('rechaza salidas fraccionarias de articulos de reventa', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  estado.articulos[0].tipo = 'reventa';
+  estado.articulos[0].nombre = 'Bebida embotellada';
+  estado.articulos[0].codigo = 'BEB001';
+  estado.articulos[0].precioVentaCents = 150;
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento(movimientoPedidoBase, tx)
+    ),
+    error => error.status === 400
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+});
+
+test('rechaza devoluciones fraccionarias de articulos de reventa', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10
+  });
+
+  estado.articulos[0].tipo = 'reventa';
+  estado.articulos[0].nombre = 'Bebida embotellada';
+  estado.articulos[0].codigo = 'BEB001';
+  estado.articulos[0].precioVentaCents = 150;
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento({
+        ...movimientoPedidoBase,
+        tipo: 'devolucion'
+      }, tx)
+    ),
+    error => error.status === 400
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+});
+
+test('restaura las existencias fraccionarias si falla el registro del movimiento', async () => {
+  reiniciar({
+    unidad: 'unidad',
+    cantidad: 10,
+    fallarMovimiento: true
+  });
+
+  await assert.rejects(
+    ejecutarEnTransaccion(tx =>
+      aplicarMovimiento(movimientoPedidoBase, tx)
+    ),
+    /Error al registrar movimiento/
+  );
+
+  assert.equal(estado.existencias[0].cantidad, 10);
+  assert.equal(estado.movimientos.length, 0);
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+});

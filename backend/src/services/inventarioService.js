@@ -29,13 +29,21 @@ function comprobarActivo(articulo) {
   }
 }
 
-// evitar cantidades fraccionarias en articulos por unidad
-function validarCantidad(unidad, cantidad) {
+// validar cantidades y permitir fracciones en el consumo de recetas
+function validarCantidad(
+  unidad,
+  cantidad,
+  permitirFracciones = false
+) {
   if (!Number.isFinite(cantidad) || cantidad < 0) {
     throw crearError('Cantidad invalida', 400);
   }
 
-  if (unidad === 'unidad' && !Number.isInteger(cantidad)) {
+  if (
+    unidad === 'unidad' &&
+    !permitirFracciones &&
+    !Number.isInteger(cantidad)
+  ) {
     throw crearError('La cantidad debe ser entera', 400);
   }
 }
@@ -230,7 +238,17 @@ async function aplicarMovimiento(datos, tx) {
 
   comprobarActivo(articulo);
 
-  validarCantidad(articulo.unidad, datos.cantidad);
+  // permitir consumo proporcional y devoluciones de recetas
+  const esMovimientoReceta =
+    articulo.tipo === 'insumo' &&
+    datos.referenciaTipo === 'pedido' &&
+    ['salida', 'devolucion'].includes(datos.tipo);
+
+  validarCantidad(
+    articulo.unidad,
+    datos.cantidad,
+    esMovimientoReceta
+  );
 
   if (datos.cantidad <= 0) {
     throw crearError(

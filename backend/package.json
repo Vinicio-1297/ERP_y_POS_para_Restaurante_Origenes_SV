@@ -17,7 +17,8 @@
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/runSql.js ../database/soporte/seed",
     "db:inventario": "node scripts/runSql.js ../database/inventario ../database/inventario/seed",
-    "db:compras": "node scripts/runSql.js ../database/compras ../database/compras/seed"
+    "db:compras": "node scripts/runSql.js ../database/compras ../database/compras/seed",
+    "db:setup": "node scripts/setupDb.js"
   },
   "dependencies": {
     "bcryptjs": "3.0.3",

@@ -17,7 +17,14 @@ function reemplazarModulo(ruta, exportaciones) {
 // Estado compartido que cada test reinicia.
 let estado;
 
-function reiniciar({ productos, contadores, clientes } = {}) {
+function reiniciar({
+  productos,
+  contadores,
+  clientes,
+  sucursales,
+  recetas,
+  existencias
+} = {}) {
   estado = {
     productos: productos ?? [
       {
@@ -31,6 +38,25 @@ function reiniciar({ productos, contadores, clientes } = {}) {
         nombre: 'Té helado',
         precioCents: 280,
         tipoProducto: 'elaborado'
+      },
+    ],
+
+    // Sucursales ficticias con diferentes identificadores.
+    sucursales: sucursales ?? [
+      {
+        id: 1,
+        nombre: 'Restaurante',
+        activo: true,
+      },
+      {
+        id: 5,
+        nombre: 'Santa Tecla',
+        activo: true,
+      },
+      {
+        id: 8,
+        nombre: 'Sucursal inactiva',
+        activo: false,
       },
     ],
 
@@ -61,6 +87,31 @@ function reiniciar({ productos, contadores, clientes } = {}) {
       },
     ],
 
+    recetas: recetas ?? [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 1,
+        cantidad: 100,
+      },
+      {
+        productoId: 2,
+        insumoId: 2,
+        rendimiento: 1,
+        cantidad: 200,
+      },
+    ],
+
+    // La clave representa sucursalId:insumoId.
+    existencias: existencias ?? {
+      '1:1': 10000,
+      '1:2': 10000,
+      '1:3': 10000,
+      '5:1': 5000,
+      '5:2': 5000,
+      '5:3': 5000,
+    },
+
     contadores: contadores ?? {
       pedido: 0,
       'consumidor-final': 0,
@@ -71,19 +122,30 @@ function reiniciar({ productos, contadores, clientes } = {}) {
     detallesGuardados: [],
     movimientosGuardados: [],
     resultadoTransaccion: null,
+    transaccionActual: null,
   };
+}
+
+// Comprueba que las operaciones utilizan la misma transacción.
+function comprobarTransaccion(transaccion) {
+  assert.ok(transaccion);
+  assert.equal(transaccion, estado.transaccionActual);
 }
 
 // Simula una transacción con commit y rollback.
 reemplazarModulo('../src/config/transaccion', {
   async ejecutarEnTransaccion(trabajo) {
     const copiaContadores = { ...estado.contadores };
-    const copiaPedidos = [...estado.pedidosGuardados];
-    const copiaDetalles = [...estado.detallesGuardados];
-    const copiaMovimientos = [...estado.movimientosGuardados];
+    const copiaPedidos = structuredClone(estado.pedidosGuardados);
+    const copiaDetalles = structuredClone(estado.detallesGuardados);
+    const copiaMovimientos = structuredClone(estado.movimientosGuardados);
+    const copiaExistencias = { ...estado.existencias };
+
+    const transaccion = { falsa: true };
+    estado.transaccionActual = transaccion;
 
     try {
-      const resultado = await trabajo({ falsa: true });
+      const resultado = await trabajo(transaccion);
 
       estado.resultadoTransaccion = 'commit';
 
@@ -93,16 +155,34 @@ reemplazarModulo('../src/config/transaccion', {
       estado.pedidosGuardados = copiaPedidos;
       estado.detallesGuardados = copiaDetalles;
       estado.movimientosGuardados = copiaMovimientos;
+      estado.existencias = copiaExistencias;
       estado.resultadoTransaccion = 'rollback';
 
       throw error;
+    } finally {
+      estado.transaccionActual = null;
     }
+  },
+});
+
+// Simula la búsqueda de sucursales activas.
+reemplazarModulo('../src/repositories/sucursalRepository', {
+  async buscarActivaPorNombre(nombre, transaccion) {
+    comprobarTransaccion(transaccion);
+
+    return estado.sucursales.find(
+      (sucursal) =>
+        sucursal.nombre === nombre &&
+        sucursal.activo
+    ) ?? null;
   },
 });
 
 // Simula la búsqueda de productos.
 reemplazarModulo('../src/repositories/productoRepository', {
-  async buscarPorIds(ids) {
+  async buscarPorIds(ids, transaccion) {
+    comprobarTransaccion(transaccion);
+
     return estado.productos.filter(
       (producto) => ids.includes(producto.id)
     );
@@ -124,7 +204,9 @@ reemplazarModulo('../src/repositories/correlativoRepository', {
     return estado.contadores[tipo] ?? null;
   },
 
-  async incrementar(tipo) {
+  async incrementar(tipo, sucursal, transaccion) {
+    comprobarTransaccion(transaccion);
+
     if (!(tipo in estado.contadores)) {
       return null;
     }
@@ -137,16 +219,22 @@ reemplazarModulo('../src/repositories/correlativoRepository', {
 
 // Simula el registro de pedidos y sus detalles.
 reemplazarModulo('../src/repositories/pedidoRepository', {
-  async insertar(datos) {
+  async insertar(datos, transaccion) {
+    comprobarTransaccion(transaccion);
+
+    const id = 120 + estado.pedidosGuardados.length;
+
     estado.pedidosGuardados.push(datos);
 
     return {
-      id: 120,
+      id,
       fecha: new Date('2026-11-22T18:09:00Z')
     };
   },
 
-  async insertarDetalle(datos) {
+  async insertarDetalle(datos, transaccion) {
+    comprobarTransaccion(transaccion);
+
     estado.detallesGuardados.push(datos);
   },
 });
@@ -154,24 +242,9 @@ reemplazarModulo('../src/repositories/pedidoRepository', {
 // Simula las recetas de los productos de prueba.
 reemplazarModulo('../src/repositories/recetaRepository', {
   async obtenerPorProductos(ids, transaccion) {
-    assert.ok(transaccion);
+    comprobarTransaccion(transaccion);
 
-    const recetas = [
-      {
-        productoId: 1,
-        insumoId: 1,
-        rendimiento: 1,
-        cantidad: 100,
-      },
-      {
-        productoId: 2,
-        insumoId: 2,
-        rendimiento: 1,
-        cantidad: 200,
-      },
-    ];
-
-    return recetas.filter(
+    return estado.recetas.filter(
       (receta) => ids.includes(receta.productoId)
     );
   },
@@ -188,14 +261,41 @@ reemplazarModulo('../src/repositories/inventarioRepository', {
   },
 });
 
+const { httpError } = require('../src/utils/httpError');
+
 // Simula los movimientos de inventario sin SQL Server.
 reemplazarModulo('../src/services/inventarioService', {
   async aplicarMovimiento(datos, transaccion) {
-    assert.ok(transaccion);
+    comprobarTransaccion(transaccion);
+
     assert.ok(datos.cantidad > 0);
     assert.equal(datos.tipo, 'salida');
 
-    estado.movimientosGuardados.push({ ...datos });
+    const clave = `${datos.sucursalId}:${datos.insumoId}`;
+
+    if (!(clave in estado.existencias)) {
+      throw httpError(404, 'Existencia no encontrada');
+    }
+
+    const stockAnterior = estado.existencias[clave];
+
+    if (stockAnterior < datos.cantidad) {
+      throw httpError(409, 'Existencias insuficientes');
+    }
+
+    const stockNuevo =
+      (
+        Math.round(stockAnterior * 1000) -
+        Math.round(datos.cantidad * 1000)
+      ) / 1000;
+
+    estado.existencias[clave] = stockNuevo;
+
+    estado.movimientosGuardados.push({
+      ...datos,
+      stockAnterior,
+      stockNuevo,
+    });
   },
 });
 
@@ -214,6 +314,8 @@ const pedidoBase = {
     { productoId: 1, cantidad: 1 },
   ],
 };
+
+// Pruebas originales de pedidos.
 
 test('crea el pedido con los totales del contrato (560 / 73 / 633)', async () => {
   reiniciar();
@@ -290,7 +392,6 @@ test('consumidor final y crédito fiscal llevan contadores separados', async () 
 
   const a = await crearPedido(pedidoBase);
 
-  // El crédito fiscal requiere un cliente con datos fiscales.
   const b = await crearPedido({
     ...pedidoBase,
     tipoComprobante: 'credito-fiscal',
@@ -495,7 +596,6 @@ test('los datos fiscales guardados no cambian al modificar el cliente', async ()
     clienteId: 1,
   });
 
-  // Simula una modificación posterior del cliente.
   estado.clientes[0].nombre = 'Nuevo nombre';
   estado.clientes[0].direccion = 'Santa Tecla';
 
@@ -503,4 +603,367 @@ test('los datos fiscales guardados no cambian al modificar el cliente', async ()
 
   assert.equal(pedido.clienteNombre, 'Empresa de Prueba SV');
   assert.equal(pedido.clienteDireccion, 'San Salvador');
+});
+
+// Pruebas de sucursales.
+
+test('descuenta los ingredientes de la sucursal predeterminada', async () => {
+  reiniciar();
+
+  await crearPedido(pedidoBase);
+
+  assert.equal(estado.existencias['1:1'], 9900);
+  assert.equal(estado.existencias['1:2'], 9800);
+  assert.equal(estado.existencias['5:1'], 5000);
+  assert.equal(estado.existencias['5:2'], 5000);
+
+  assert.ok(
+    estado.movimientosGuardados.every(
+      (movimiento) => movimiento.sucursalId === 1
+    )
+  );
+});
+
+test('utiliza el id real de una sucursal diferente de uno', async () => {
+  reiniciar();
+
+  await crearPedido(
+    pedidoBase,
+    { sucursal: 'Santa Tecla' }
+  );
+
+  assert.equal(estado.pedidosGuardados[0].sucursal, 'Santa Tecla');
+  assert.equal(estado.existencias['5:1'], 4900);
+  assert.equal(estado.existencias['5:2'], 4800);
+  assert.equal(estado.existencias['1:1'], 10000);
+  assert.equal(estado.existencias['1:2'], 10000);
+
+  assert.ok(
+    estado.movimientosGuardados.every(
+      (movimiento) => movimiento.sucursalId === 5
+    )
+  );
+});
+
+test('rechaza una venta en una sucursal inexistente', async () => {
+  reiniciar();
+
+  await assert.rejects(
+    crearPedido(
+      pedidoBase,
+      { sucursal: 'Sucursal inexistente' }
+    ),
+    (error) =>
+      error.status === 409 &&
+      /sucursal/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.contadores.pedido, 0);
+  assert.equal(estado.pedidosGuardados.length, 0);
+  assert.equal(estado.movimientosGuardados.length, 0);
+});
+
+test('rechaza una venta en una sucursal desactivada', async () => {
+  reiniciar();
+
+  await assert.rejects(
+    crearPedido(
+      pedidoBase,
+      { sucursal: 'Sucursal inactiva' }
+    ),
+    (error) => error.status === 409
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.contadores.pedido, 0);
+  assert.equal(estado.pedidosGuardados.length, 0);
+  assert.equal(estado.movimientosGuardados.length, 0);
+});
+
+// Pruebas de recetas y descuento de ingredientes.
+
+test('descuenta ingredientes segun el rendimiento de la receta', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 10,
+        cantidad: 500,
+      },
+    ],
+  });
+
+  await crearPedido({
+    ...pedidoBase,
+    items: [
+      { productoId: 1, cantidad: 1 },
+    ],
+  });
+
+  assert.equal(estado.movimientosGuardados[0].cantidad, 50);
+  assert.equal(estado.existencias['1:1'], 9950);
+});
+
+test('multiplica el consumo por la cantidad de productos vendidos', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 10,
+        cantidad: 500,
+      },
+    ],
+  });
+
+  await crearPedido({
+    ...pedidoBase,
+    items: [
+      { productoId: 1, cantidad: 3 },
+    ],
+  });
+
+  assert.equal(estado.movimientosGuardados[0].cantidad, 150);
+  assert.equal(estado.existencias['1:1'], 9850);
+});
+
+test('acumula los ingredientes compartidos entre diferentes recetas', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 10,
+        cantidad: 500,
+      },
+      {
+        productoId: 2,
+        insumoId: 1,
+        rendimiento: 1,
+        cantidad: 200,
+      },
+    ],
+  });
+
+  await crearPedido(pedidoBase);
+
+  assert.equal(estado.movimientosGuardados.length, 1);
+  assert.equal(estado.movimientosGuardados[0].cantidad, 250);
+  assert.equal(estado.existencias['1:1'], 9750);
+});
+
+test('calcula correctamente el consumo de productos repetidos', async () => {
+  reiniciar();
+
+  await crearPedido({
+    ...pedidoBase,
+    items: [
+      { productoId: 1, cantidad: 1 },
+      { productoId: 1, cantidad: 2 },
+    ],
+  });
+
+  assert.equal(estado.movimientosGuardados.length, 1);
+  assert.equal(estado.movimientosGuardados[0].cantidad, 300);
+  assert.equal(estado.existencias['1:1'], 9700);
+});
+
+test('permite calcular consumos fraccionarios de una receta', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 3,
+        rendimiento: 10,
+        cantidad: 2,
+      },
+    ],
+    existencias: {
+      '1:3': 100,
+    },
+  });
+
+  await crearPedido({
+    ...pedidoBase,
+    items: [
+      { productoId: 1, cantidad: 3 },
+    ],
+  });
+
+  assert.equal(estado.movimientosGuardados[0].cantidad, 0.6);
+  assert.equal(estado.existencias['1:3'], 99.4);
+});
+
+test('rechaza consumos que superan la precision de tres decimales', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 3,
+        cantidad: 1,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    crearPedido({
+      ...pedidoBase,
+      items: [
+        { productoId: 1, cantidad: 1 },
+      ],
+    }),
+    (error) =>
+      error.status === 409 &&
+      /precision/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.movimientosGuardados.length, 0);
+  assert.equal(estado.contadores.pedido, 0);
+});
+
+test('rechaza vender un producto elaborado sin receta', async () => {
+  reiniciar({
+    recetas: [],
+  });
+
+  await assert.rejects(
+    crearPedido(pedidoBase),
+    (error) =>
+      error.status === 409 &&
+      /receta activa/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.pedidosGuardados.length, 0);
+  assert.equal(estado.detallesGuardados.length, 0);
+  assert.equal(estado.movimientosGuardados.length, 0);
+});
+
+test('rechaza una receta con rendimiento invalido', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 0,
+        cantidad: 500,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    crearPedido({
+      ...pedidoBase,
+      items: [
+        { productoId: 1, cantidad: 1 },
+      ],
+    }),
+    (error) =>
+      error.status === 409 &&
+      /cantidades invalidas/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.movimientosGuardados.length, 0);
+});
+
+test('rechaza una receta con cantidad de ingrediente invalida', async () => {
+  reiniciar({
+    recetas: [
+      {
+        productoId: 1,
+        insumoId: 1,
+        rendimiento: 1,
+        cantidad: -100,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    crearPedido({
+      ...pedidoBase,
+      items: [
+        { productoId: 1, cantidad: 1 },
+      ],
+    }),
+    (error) =>
+      error.status === 409 &&
+      /cantidades invalidas/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.movimientosGuardados.length, 0);
+});
+
+// Pruebas de existencias y rollback.
+
+test('permite vender cuando hay exactamente los ingredientes necesarios', async () => {
+  reiniciar({
+    existencias: {
+      '1:1': 100,
+      '1:2': 200,
+    },
+  });
+
+  await crearPedido(pedidoBase);
+
+  assert.equal(estado.existencias['1:1'], 0);
+  assert.equal(estado.existencias['1:2'], 0);
+  assert.equal(estado.resultadoTransaccion, 'commit');
+});
+
+test('rechaza una venta cuando no hay ingredientes suficientes', async () => {
+  reiniciar({
+    existencias: {
+      '1:1': 50,
+      '1:2': 200,
+    },
+  });
+
+  await assert.rejects(
+    crearPedido(pedidoBase),
+    (error) =>
+      error.status === 409 &&
+      /insuficientes/.test(error.message)
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+  assert.equal(estado.existencias['1:1'], 50);
+  assert.equal(estado.existencias['1:2'], 200);
+  assert.equal(estado.pedidosGuardados.length, 0);
+  assert.equal(estado.detallesGuardados.length, 0);
+  assert.equal(estado.movimientosGuardados.length, 0);
+  assert.equal(estado.contadores.pedido, 0);
+  assert.equal(estado.contadores['consumidor-final'], 0);
+});
+
+test('revierte los ingredientes anteriores si falla un descuento posterior', async () => {
+  reiniciar({
+    existencias: {
+      '1:1': 1000,
+      '1:2': 50,
+    },
+  });
+
+  await assert.rejects(
+    crearPedido(pedidoBase),
+    (error) => error.status === 409
+  );
+
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+
+  // El primer ingrediente se había descontado antes del error.
+  // La transacción debe restaurar ambas existencias.
+  assert.equal(estado.existencias['1:1'], 1000);
+  assert.equal(estado.existencias['1:2'], 50);
+
+  assert.equal(estado.movimientosGuardados.length, 0);
+  assert.equal(estado.pedidosGuardados.length, 0);
+  assert.equal(estado.detallesGuardados.length, 0);
+  assert.equal(estado.contadores.pedido, 0);
+  assert.equal(estado.contadores['consumidor-final'], 0);
 });

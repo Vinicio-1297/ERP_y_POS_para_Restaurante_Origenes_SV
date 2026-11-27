@@ -14,6 +14,7 @@ const {
 const {
   getCategorias,
   getProductos,
+  getAlertasStock,
   getProximoNumero,
   postPedido,
   getPedidos,
@@ -36,6 +37,8 @@ router.get(
   validate(productosQuerySchema, 'query'),
   getProductos
 );
+
+router.get('/productos/disponibilidad', authenticate, getAlertasStock);
 
 // OJO con el orden: /pedidos/proximo-numero debe ir ANTES de /pedidos/:id.
 router.get('/pedidos/proximo-numero', authenticate, getProximoNumero);

@@ -64,3 +64,35 @@ export async function listarProductosPOS(signal) {
     category: nombres.get(String(p.categoriaId)) || 'Sin categoría',
   }));
 }
+// consultar las recetas registradas
+export async function listarRecetas(signal) {
+  const datos = await request('/recetas', { signal });
+
+  if (!Array.isArray(datos)) {
+    throw new Error('La API no devolvio una lista de recetas.');
+  }
+
+  return datos.map(receta => ({
+    ...receta,
+    id: String(receta.id),
+    productoId: String(receta.productoId),
+    rendimiento: Number(receta.rendimiento),
+    ingredientes: receta.ingredientes.map(ingrediente => ({
+      ...ingrediente,
+      insumoId: String(ingrediente.insumoId),
+      cantidad: Number(ingrediente.cantidad),
+    })),
+  }));
+}
+
+// registrar una receta
+export const crearReceta = datos =>
+  enviar('/recetas', 'POST', datos);
+
+// actualizar una receta
+export const actualizarReceta = (id, datos) =>
+  enviar(`/recetas/${id}`, 'PATCH', datos);
+
+// desactivar una receta
+export const desactivarReceta = id =>
+  enviar(`/recetas/${id}`, 'DELETE');

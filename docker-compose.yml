@@ -4,9 +4,9 @@ services:
     container_name: origenes-sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el archivo .env de la raíz}
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el archivo .env de la raiz}
     ports:
-      - "1434:1433"
+      - "${SQLSERVER_PORT:-1434}:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
     healthcheck:
@@ -17,6 +17,73 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  db-setup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.setup
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_SERVER: sqlserver
+      DB_PORT: "1433"
+      DB_NAME: ${DB_NAME:-restaurante}
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el archivo .env de la raiz}
+      DB_ENCRYPT: "false"
+      DB_TRUST_SERVER_CERT: "true"
+      DB_SEED_DEMO: "${DB_SEED_DEMO:-false}"
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      db-setup:
+        condition: service_completed_successfully
+    environment:
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el archivo .env de la raiz}
+      CORS_ORIGIN: http://localhost:5173
+      DB_SERVER: sqlserver
+      DB_PORT: "1433"
+      DB_NAME: ${DB_NAME:-restaurante}
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el archivo .env de la raiz}
+      DB_ENCRYPT: "false"
+      DB_TRUST_SERVER_CERT: "true"
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-soporte@example.com}
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      VITE_API_URL: /api
+      API_PROXY_TARGET: http://backend:3000
+    ports:
+      - "127.0.0.1:5173:5173"
+    restart: unless-stopped
 
 volumes:
   sqlserver-data:
