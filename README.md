@@ -37,7 +37,23 @@ y recursos humanos desde una misma aplicación.
 
 ## Arquitectura
 
-El sistema utiliza una arquitectura cliente-servidor.
+El sistema utiliza una arquitectura cliente-servidor. En desarrollo local,
+el backend conecta a `localhost:1435`; dentro de Docker conecta al servicio
+`sqlserver:1433`.
+
+```mermaid
+flowchart LR
+	browser[ navegador React ] -->|HTTP :5173| vite[Vite y React Router]
+	vite -->|/api en desarrollo| api[Express :3000]
+	api -->|"local localhost:1435 / Docker sqlserver:1433"| db[(SQL Server)]
+	compose[Docker Compose] -. administra .-> db
+```
+
+- `frontend/`: React `18.3.1`, React Router, Vite, Bootstrap y Reactstrap. React 18 se usa para ajustarse a los peer dependencies de Reactstrap y `react-popper` sin omitir la validación de npm.
+- `backend/`: Express con CommonJS, middleware de seguridad y conexión reutilizable a SQL Server mediante `mssql`.
+- `database/`: scripts SQL de los módulos del sistema.
+- `backend/scripts/setupDb.js`: crea la base configurada y ejecuta los scripts de instalación.
+- `docker-compose.yml`: SQL Server 2022, instalador y aplicación con volumen persistente.
 
 ```text
 Navegador
@@ -140,12 +156,18 @@ En Linux o macOS:
 cp .env.example .env
 ```
 
+| Archivo | Variables | Uso |
+| --- | --- | --- |
+| `.env` | `DB_PASSWORD`, `DB_NAME`, `SQLSERVER_PORT`, `DB_SEED_DEMO`, `JWT_SECRET`, `SUPPORT_EMAIL` | Configuración de Docker Compose. |
+| `backend/.env` | `PORT`, `JWT_SECRET`, `CORS_ORIGIN`, `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ENCRYPT`, `DB_TRUST_SERVER_CERT`, `DB_SEED_DEMO` | Configuración del backend local; usa `DB_PORT=1435`. |
+| `frontend/.env` | `VITE_API_URL` | Prefijo de la API visible para Vite; localmente usa `/api`. Solo las variables `VITE_*` se exponen al navegador. |
+
 El archivo contiene las siguientes variables:
 
 ```env
 DB_PASSWORD=LocalDev_Passw0rd!
 DB_NAME=restaurante
-SQLSERVER_PORT=1434
+SQLSERVER_PORT=1435
 DB_SEED_DEMO=true
 
 JWT_SECRET=replace-with-a-long-random-secret-before-use
@@ -169,8 +191,9 @@ de JWT_SECRET por un secreto aleatorio y seguro.
 La contraseña de SQL Server incluida en el ejemplo está destinada
 únicamente a entornos locales de desarrollo.
 
-Si el puerto 1434 está ocupado, puede utilizarse otro puerto
-disponible modificando SQLSERVER_PORT.
+Si `SQLSERVER_PORT` está ocupado, elige otro puerto disponible.
+Al ejecutar el backend fuera de Docker, configura `DB_PORT` con ese
+mismo puerto; dentro de Docker se utiliza el puerto interno `1433`.
 
 ### Iniciar el sistema
 
@@ -302,7 +325,7 @@ JWT_SECRET=replace-with-a-long-random-secret-before-use
 CORS_ORIGIN=http://localhost:5173
 
 DB_SERVER=localhost
-DB_PORT=1434
+DB_PORT=1435
 DB_NAME=restaurante
 DB_USER=sa
 DB_PASSWORD=LocalDev_Passw0rd!
@@ -523,8 +546,14 @@ http://localhost:5173
 El servidor de Vite redirige las solicitudes realizadas a `/api`
 hacia el backend.
 
-Cuando se ejecuta mediante Docker, el proxy utiliza la dirección
-interna del contenedor del backend.
+No hay un API Gateway independiente. En desarrollo local, el navegador
+solicita rutas relativas como `/api/health`; Vite reenvía `/api/*` a
+`http://localhost:3000`, y el backend se conecta a SQL Server en
+`localhost:1435`. Con Docker, el proxy usa el servicio interno del backend,
+y este se conecta a `sqlserver:1433`. Docker publica el puerto externo
+configurado por `SQLSERVER_PORT` (por defecto `1435`) hacia el puerto interno
+`1433`. En producción, el proxy de desarrollo de Vite no está disponible y
+debe configurarse el enrutamiento del servidor que aloje frontend y API.
 
 Cuando se ejecuta localmente, utiliza:
 
@@ -763,7 +792,7 @@ puede accederse desde SSMS utilizando los siguientes datos:
 
 | Campo | Valor |
 |---|---|
-| Servidor | localhost,1434 |
+| Servidor | localhost,1435 |
 | Autenticación | SQL Server Authentication |
 | Usuario | sa |
 | Contraseña | Valor de DB_PASSWORD |
