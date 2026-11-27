@@ -9,13 +9,13 @@ y recursos humanos desde una misma aplicación.
 
 ## Tecnologías utilizadas
 
-- Frontend: React, Vite y Bootstrap.
+- Frontend: React, Vite, React Router, Bootstrap y Reactstrap.
 - Backend: Node.js y Express.
 - Base de datos: Microsoft SQL Server.
 - ORM: Sequelize.
-- Autenticación: JSON Web Token (JWT).
+- Autenticación: JSON Web Token (JWT) y bcrypt.
 - Validación de datos: Zod.
-- Generación de documentos PDF: PDFKit.
+- Seguridad HTTP: Helmet, CORS y limitación de solicitudes.
 - Pruebas: Node.js Test Runner.
 - Contenedores: Docker y Docker Compose.
 - Control de versiones: Git y GitHub.
@@ -56,43 +56,161 @@ El frontend realiza solicitudes HTTP a la API del backend.
 El backend valida las solicitudes, aplica las reglas del negocio
 y realiza las operaciones correspondientes en la base de datos.
 
+### Capas del backend
+
+El backend está organizado en capas. Cada capa tiene una única
+responsabilidad y solo se comunica con la capa siguiente.
+
+```text
+Solicitud HTTP  (POST /api/pedidos)
+    |
+    v
+routes/          Define el endpoint y la cadena de middlewares
+    |
+    v
+middlewares/     authenticate (JWT) -> authorize (rol) -> validate (Zod)
+    |
+    v
+controllers/     Recibe la solicitud y devuelve la respuesta HTTP
+    |
+    v
+services/        Reglas de negocio (cálculo de totales, inventario, etc.)
+    |
+    v
+repositories/    Consultas a SQL Server
+    |
+    v
+SQL Server
+```
+
+Los errores de cualquier capa se envían con `next(error)` al
+manejador central `middlewares/errorHandler.js`, que responde
+con un formato uniforme.
+
+### Capas del frontend
+
+```text
+main.jsx -> App.jsx -> routes/AppRoutes.jsx
+                            |
+                            v
+                        pages/            Una página por módulo
+                            |
+              +-------------+-------------+
+              v                           v
+        components/                    hooks/
+        (piezas visuales)              (estado reutilizable)
+              |                           |
+              +-------------+-------------+
+                            v
+                        services/         Llamadas HTTP a la API
+                            |
+                            v
+                  Backend (/api, mediante el proxy de Vite)
+```
+
+Las rutas protegidas utilizan `RequireAuth` (verifica la sesión)
+y `RequireRole` (verifica el rol) definidos en `routes/AppRoutes.jsx`.
+
 ## Estructura del proyecto
 
 ```text
 ERP_y_POS_para_Restaurante_Origenes_SV/
 |
-|-- backend/
-|   |-- scripts/
-|   |   |-- runSql.js
-|   |   |-- setupDb.js
+|-- backend/                          API REST (Node.js + Express)
+|   |-- scripts/                      Utilidades de base de datos
+|   |   |-- setupDb.js                Instalador completo de la base de datos
+|   |   |-- runSql.js                 Ejecuta los scripts .sql de una carpeta
+|   |   |-- migrate.js                Migraciones del módulo de soporte
+|   |   |-- devToken.js               Token JWT de prueba (solo desarrollo)
 |   |-- src/
-|   |-- test/
-|   |-- Dockerfile
-|   |-- Dockerfile.setup
+|   |   |-- server.js                 Punto de entrada: inicia el servidor
+|   |   |-- app.js                    Configuración de Express y rutas /api
+|   |   |-- config/                   Conexión a SQL Server, Sequelize, transacciones
+|   |   |-- routes/                   Endpoints de cada módulo
+|   |   |-- middlewares/              auth, authorize, validate, errorHandler
+|   |   |-- schemas/                  Validaciones de entrada con Zod
+|   |   |-- controllers/              Reciben la solicitud y responden
+|   |   |-- services/                 Reglas de negocio
+|   |   |-- repositories/             Consultas a la base de datos
+|   |   |-- models/                   Modelos Sequelize (Usuario, Cliente, Sucursal)
+|   |   |-- utils/                    Funciones puras (totales, nómina, fechas...)
+|   |-- test/                         Pruebas automatizadas (node --test)
+|   |-- Dockerfile                    Imagen del backend
+|   |-- Dockerfile.setup              Imagen del instalador de la base de datos
 |   |-- package.json
 |   |-- .env.example
 |
-|-- frontend/
+|-- frontend/                         Interfaz web (React + Vite)
+|   |-- public/
+|   |   |-- img/
+|   |       |-- logo/                 Logos del restaurante
+|   |       |-- productos/            Fotografías de los productos del menú
 |   |-- src/
+|   |   |-- main.jsx                  Punto de entrada de React
+|   |   |-- App.jsx                   Componente raíz
+|   |   |-- routes/                   AppRoutes.jsx: rutas y control de acceso por rol
+|   |   |-- pages/                    Una página por módulo (Login, POS, Caja...)
+|   |   |-- components/
+|   |   |   |-- pos/                  Menú, productos y panel del pedido
+|   |   |   |-- caja/                 Formularios y resumen del turno de caja
+|   |   |   |-- rrhh/                 Empleados y planilla
+|   |   |   |-- layout/               Estructura general de la aplicación
+|   |   |   |-- frontb/               Barra de navegación FrontB
+|   |   |   |-- gestion/              Navegación de inventario, recetas, compras y proveedores
+|   |   |-- hooks/                    Estado reutilizable (useOrder y modales)
+|   |   |-- services/                 Llamadas a la API (http.js, authService.js...)
+|   |   |-- utils/                    Dinero, permisos por rol y formatos
+|   |   |-- data/                     Datos de apoyo del menú
+|   |   |-- styles/                   Hojas de estilo por módulo
+|   |   |-- styles.css                Estilos generales
+|   |-- index.html
+|   |-- vite.config.js                Configuración de Vite y proxy hacia /api
 |   |-- Dockerfile
 |   |-- package.json
-|   |-- vite.config.js
 |   |-- .env.example
 |
-|-- database/
-|   |-- pos/
-|   |-- soporte/
-|   |-- caja/
-|   |-- rrhh/
-|   |-- inventario/
-|   |-- compras/
-|   |-- seed.sql
+|-- database/                         Scripts SQL por módulo
+|   |-- pos/                          Categorías, productos, correlativos y pedidos
+|   |   |-- 01_categorias.sql ... 06_pedidos_anulacion.sql
+|   |   |-- seed/                     Datos iniciales y de demostración
+|   |-- soporte/                      Sucursales, usuarios y clientes
+|   |   |-- 01_sucursales.sql ... 05_datos_fiscales_pedidos.sql
+|   |   |-- seed/
+|   |   |-- README.md
+|   |-- caja/                         Turnos y movimientos de caja
+|   |-- rrhh/                         Cargos, empleados, tramos de renta y planillas
+|   |   |-- seed/
+|   |-- inventario/                   Insumos, existencias, movimientos y recetas
+|   |   |-- seed/
+|   |-- compras/                      Proveedores, compras y cuentas por pagar
+|   |   |-- seed/
+|   |-- seed.sql                      Datos básicos comunes
 |
 |-- .dockerignore
-|-- .env.example
-|-- docker-compose.yml
+|-- .env.example                      Variables de entorno de Docker Compose
+|-- docker-compose.yml                Servicios: sqlserver, db-setup, backend, frontend
+|-- LICENSE
 |-- README.md
 ```
+
+Los scripts de cada carpeta de `database/` están numerados
+(`01_`, `02_`, ...) y se ejecutan en ese orden.
+
+### Módulos y dónde se encuentran
+
+| Módulo | Base de datos | Backend (routes / services) | Frontend (pages) |
+|---|---|---|---|
+| Autenticación | `soporte/` | authRoutes, authService | LoginPage |
+| POS y pedidos | `pos/` | posRoutes, pedidoService, facturacionService | posPage |
+| Caja | `caja/` | cajaRoutes, cajaService | CajaPage |
+| Inventario | `inventario/` | inventarioRoutes, inventarioService, stockService | InventarioPage |
+| Recetas | `inventario/` | recetaRoutes, recetaService | RecetasPage |
+| Compras y proveedores | `compras/` | compraRoutes, proveedorRoutes, compraService | ComprasPage, ProveedoresPage |
+| Cuentas por pagar | `compras/` | cuentaPorPagarRoutes, cuentaPorPagarService | CuentasPorPagarPage |
+| Recursos humanos | `rrhh/` | empleadoRoutes, planillaRoutes, planillaService | RrhhPage |
+| Clientes y sucursales | `soporte/` | clienteRoutes, sucursalRoutes | Se gestionan desde el POS |
+| Reportes | `pos/` | reporteRoutes, reporteService | No tiene página propia |
+| Estado del sistema | No aplica | healthRoutes | HealthPage |
 
 ## 1. Requisitos
 
@@ -752,6 +870,7 @@ con SQL Server para comprobar:
 | npm run db:compras | Ejecuta los scripts de compras. |
 | npm run db:migrate | Ejecuta las migraciones de soporte. |
 | npm run db:seed | Ejecuta los seeds de soporte. |
+| npm run dev:token | Imprime un token JWT de prueba (solo desarrollo). |
 
 Para una instalación nueva se recomienda utilizar db:setup
 en lugar de ejecutar los módulos individualmente.
