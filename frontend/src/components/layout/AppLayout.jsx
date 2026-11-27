@@ -67,14 +67,6 @@ export default function AppLayout() {
         </time>
 
         <div className="app-user">
-          <button
-            type="button"
-            className="app-bell"
-            aria-label="Notificaciones"
-          >
-            🔔
-          </button>
-
           <span aria-hidden="true">👤</span>
 
           <UncontrolledDropdown>

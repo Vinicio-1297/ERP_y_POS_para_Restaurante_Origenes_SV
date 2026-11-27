@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { proveedoresService } from '../services/gestionRepository.js';
-import { newFrontBId } from '../utils/gestionUtils.js';
+import { listarProveedores, crearProveedor, actualizarProveedor, desactivarProveedor } from '../services/comprasProveedoresApi.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
 import { canCreate, canEdit, canManage, MODULES } from '../utils/permissions.js';
 import '../styles/proveedores-feature.css';
 
-const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '', diasCredito: '0', estado: 'Activo' });
+const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '' });
 
 function telefonoNacional(valor) {
   const actual = String(valor || '').trim();
@@ -22,8 +21,6 @@ function validar(form, proveedores, editando) {
   if (!form.contacto.trim()) return 'Ingresá una persona de contacto.';
   if (!form.telefono.trim()) return 'Ingresá un teléfono.';
   if (form.correo.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo.trim())) return 'Ingresá un correo válido.';
-  const dias = Number(form.diasCredito);
-  if (String(form.diasCredito).trim() === '' || !Number.isInteger(dias) || dias < 0 || dias > 365) return 'Los días de crédito deben estar entre 0 y 365.';
   if (proveedores.some(p => p.id !== editando && p.nombre.trim().toLowerCase() === form.nombre.trim().toLowerCase())) return 'Ya existe un proveedor con ese nombre.';
   if (form.nit.trim() && proveedores.some(p => p.id !== editando && p.nit && p.nit.trim().toLowerCase() === form.nit.trim().toLowerCase())) return 'Ya existe un proveedor con ese NIT.';
   return '';
@@ -33,7 +30,9 @@ export default function ProveedoresPage() {
   const puedeCrear = canCreate(MODULES.PROVEEDORES);
   const puedeEditar = canEdit();
   const puedeCambiarEstado = canManage();
-  const [proveedores, setProveedores] = useState(proveedoresService.list);
+  const [proveedores, setProveedores] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
   const [buscar, setBuscar] = useState('');
   const [enfocadoId, setEnfocadoId] = useState(null);
   const [filtro, setFiltro] = useState('Todos');
@@ -42,7 +41,27 @@ export default function ProveedoresPage() {
   const [form, setForm] = useState(VACIO);
   const [error, setError] = useState('');
 
-  useEffect(() => { if (puedeCrear || puedeEditar) proveedoresService.save(proveedores); }, [proveedores, puedeCrear, puedeEditar]);
+  // Los proveedores viven en la base de datos: se leen de la API (no de localStorage).
+  async function cargar(signal) {
+    try {
+      const filas = await listarProveedores({}, signal);
+      if (!signal?.aborted) {
+        setProveedores(filas);
+        setError('');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') setError(err.message);
+    } finally {
+      if (!signal?.aborted) setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    cargar(controller.signal);
+    return () => controller.abort();
+  }, []);
+
   const close = () => { setModal(false); setError(''); };
   const dialogRef = useGestionModal(modal, close);
 
@@ -54,35 +73,54 @@ export default function ProveedoresPage() {
 
   const activos = proveedores.filter(p => p.estado === 'Activo').length;
   const inactivos = proveedores.length - activos;
-  const conCredito = proveedores.filter(p => p.estado === 'Activo' && Number(p.diasCredito) > 0).length;
   const proveedorEnfocado = lista.find(p => String(p.id) === String(enfocadoId)) || lista[0] || null;
 
   function abrir(p = null) {
     if (p ? !puedeEditar : !puedeCrear) return;
     setEditando(p?.id ?? null);
-    setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: telefonoNacional(p.telefono), correo: p.correo || '', direccion: p.direccion || '', diasCredito: String(p.diasCredito ?? 0), estado: p.estado } : VACIO());
+    setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: telefonoNacional(p.telefono), correo: p.correo || '', direccion: p.direccion || '' } : VACIO());
     setError(''); setModal(true);
   }
-  function guardar(e) {
+  async function guardar(e) {
     e.preventDefault();
+    if (guardando) return;
     if (!(editando ? puedeEditar : puedeCrear)) return;
     if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) return;
     const mensaje = validar(form, proveedores, editando);
     if (mensaje) { setError(mensaje); return; }
-    const item = {
-      id: editando || newFrontBId('prov'),
-      nombre: form.nombre.trim(), nit: form.nit.trim(), contacto: form.contacto.trim(),
-      telefono: form.telefono.trim(), correo: form.correo.trim(), direccion: form.direccion.trim(),
-      diasCredito: Number(form.diasCredito), estado: form.estado,
+
+    // La API usa razon_social; los campos vacíos opcionales se envían como null.
+    const opcional = (texto) => texto.trim() || null;
+    const datos = {
+      razon_social: form.nombre.trim(),
+      nit: opcional(form.nit),
+      contacto: form.contacto.trim(),
+      telefono: form.telefono.trim(),
+      correo: opcional(form.correo),
+      direccion: opcional(form.direccion),
     };
-    setProveedores(prev => editando ? prev.map(p => p.id === editando ? item : p) : [...prev, item]);
-    setModal(false);
+
+    setGuardando(true);
+    try {
+      if (editando) await actualizarProveedor(editando, datos);
+      else await crearProveedor(datos);
+      await cargar();
+      setModal(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
   }
-  function cambiarEstado(p) {
-    if (!puedeCambiarEstado) return;
-    const nuevo = p.estado === 'Activo' ? 'Inactivo' : 'Activo';
-    if (!window.confirm(`¿Marcar a ${p.nombre} como ${nuevo.toLowerCase()}?`)) return;
-    setProveedores(prev => prev.map(item => item.id === p.id ? { ...item, estado: nuevo } : item));
+  async function cambiarEstado(p) {
+    if (!puedeCambiarEstado || p.estado !== 'Activo') return;
+    if (!window.confirm(`¿Desactivar a ${p.nombre}?`)) return;
+    try {
+      await desactivarProveedor(p.id);
+      await cargar();
+    } catch (err) {
+      setError(err.message);
+    }
   }
   return (
     <div className="frontb-workspace">
@@ -96,7 +134,6 @@ export default function ProveedoresPage() {
         <article><span>Registrados</span><strong>{proveedores.length}</strong></article>
         <article><span>Activos</span><strong>{activos}</strong></article>
         <article><span>Inactivos</span><strong>{inactivos}</strong></article>
-        <article><span>Con crédito</span><strong>{conCredito}</strong></article>
       </div>
       <div className="frontb-split frontb-split--providers">
       <div className="prv-panel">
@@ -105,9 +142,9 @@ export default function ProveedoresPage() {
           <input type="search" aria-label="Buscar proveedores" placeholder="Buscar nombre, contacto, NIT o teléfono..." value={buscar} onChange={e => setBuscar(e.target.value)} />
           <select value={filtro} onChange={e => setFiltro(e.target.value)} aria-label="Filtrar por estado"><option>Todos</option><option>Activo</option><option>Inactivo</option></select>
         </div>
-        <div className="prv-table-wrap"><table><thead><tr><th>PROVEEDOR</th><th>CONTACTO</th><th>TELÉFONO</th><th>CRÉDITO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
-          <tbody>{lista.length === 0 ? <tr><td className="prv-empty" colSpan={6}>{proveedores.length ? 'No se encontraron proveedores con esos filtros.' : 'Todavía no hay proveedores registrados.'}</td></tr> : lista.map(p => (
-            <tr key={p.id} className={proveedorEnfocado?.id === p.id ? 'frontb-row-selected' : ''}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td>{p.diasCredito ? `${p.diasCredito} días` : 'Contado'}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" className="frontb-row-view" aria-label={`Ver ficha de ${p.nombre}`} aria-pressed={proveedorEnfocado?.id === p.id} onClick={() => setEnfocadoId(p.id)}>Ver</button>{puedeEditar && <button type="button" onClick={() => abrir(p)}>Editar</button>}{puedeCambiarEstado && <button type="button" onClick={() => cambiarEstado(p)}>{p.estado === 'Activo' ? 'Desactivar' : 'Activar'}</button>}</div></td></tr>
+        <div className="prv-table-wrap"><table><thead><tr><th>PROVEEDOR</th><th>CONTACTO</th><th>TELÉFONO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
+          <tbody>{lista.length === 0 ? <tr><td className="prv-empty" colSpan={5}>{cargando ? 'Cargando proveedores...' : proveedores.length ? 'No se encontraron proveedores con esos filtros.' : 'Todavía no hay proveedores registrados.'}</td></tr> : lista.map(p => (
+            <tr key={p.id} className={proveedorEnfocado?.id === p.id ? 'frontb-row-selected' : ''}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" className="frontb-row-view" aria-label={`Ver ficha de ${p.nombre}`} aria-pressed={proveedorEnfocado?.id === p.id} onClick={() => setEnfocadoId(p.id)}>Ver</button>{puedeEditar && <button type="button" onClick={() => abrir(p)}>Editar</button>}{puedeCambiarEstado && p.estado === 'Activo' && <button type="button" onClick={() => cambiarEstado(p)}>Desactivar</button>}</div></td></tr>
           ))}</tbody></table></div>
       </div>
       <aside className="prv-panel frontb-detail-panel">
@@ -119,7 +156,6 @@ export default function ProveedoresPage() {
             <div><dt>Teléfono</dt><dd>{proveedorEnfocado.telefono}</dd></div>
             <div><dt>Correo</dt><dd>{proveedorEnfocado.correo || 'No registrado'}</dd></div>
             <div><dt>NIT</dt><dd>{proveedorEnfocado.nit || 'No registrado'}</dd></div>
-            <div><dt>Crédito</dt><dd>{proveedorEnfocado.diasCredito ? `${proveedorEnfocado.diasCredito} días` : 'Contado'}</dd></div>
             <div><dt>Dirección</dt><dd>{proveedorEnfocado.direccion || 'No registrada'}</dd></div>
           </dl>
           {puedeEditar && <button type="button" className="prv-primary frontb-detail-action" onClick={() => abrir(proveedorEnfocado)}>Editar proveedor</button>}
@@ -136,12 +172,10 @@ export default function ProveedoresPage() {
               <label>Persona de contacto *<input required maxLength={100} value={form.contacto} onChange={e => setForm(v => ({ ...v, contacto: e.target.value }))} /></label>
               <label>Teléfono *<input required type="tel" maxLength={9} pattern="[0-9]{4}-?[0-9]{4}" title="Ingresá 8 dígitos, por ejemplo 7123-4567" placeholder="7123-4567" value={form.telefono} onChange={e => setForm(v => ({ ...v, telefono: e.target.value }))} /></label>
               <label>Correo electrónico<input type="email" maxLength={120} value={form.correo} onChange={e => setForm(v => ({ ...v, correo: e.target.value }))} /></label>
-              <label>Días de crédito<input type="number" min="0" max="365" step="1" required value={form.diasCredito} onChange={e => setForm(v => ({ ...v, diasCredito: e.target.value }))} /></label>
               <label className="prv-wide">Dirección<input maxLength={250} value={form.direccion} onChange={e => setForm(v => ({ ...v, direccion: e.target.value }))} /></label>
-              <label>Estado<select value={form.estado} onChange={e => setForm(v => ({ ...v, estado: e.target.value }))}><option>Activo</option><option>Inactivo</option></select></label>
             </div>
             {error && <p className="prv-error" role="alert">{error}</p>}
-            <div className="prv-form-actions"><button type="button" className="prv-secondary" onClick={close}>Cancelar</button><button type="submit" className="prv-primary">Guardar proveedor</button></div>
+            <div className="prv-form-actions"><button type="button" className="prv-secondary" onClick={close}>Cancelar</button><button type="submit" className="prv-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar proveedor'}</button></div>
           </form>
         </div>
       </div>}

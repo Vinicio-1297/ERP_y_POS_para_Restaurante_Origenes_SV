@@ -24,24 +24,6 @@ from (
     values
         (
             N'Empleado Demo',
-            N'Barista Uno',
-            '00000001-0',
-            N'Barista',
-            45000,
-            '2026-01-05',
-            N'barista1@example.com'
-        ),
-        (
-            N'Empleado Demo',
-            N'Barista Dos',
-            '00000002-0',
-            N'Barista',
-            45000,
-            '2026-02-02',
-            N'barista2@example.com'
-        ),
-        (
-            N'Empleado Demo',
             N'Cajero Uno',
             '00000003-0',
             N'Cajero',

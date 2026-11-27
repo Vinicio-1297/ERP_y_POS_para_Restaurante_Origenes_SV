@@ -1,5 +1,5 @@
 -- empleados del restaurante. Un empleado NO es lo mismo que un usuario:
--- un barista puede no tener login, por eso usuario_id es opcional.
+-- un empleado puede no tener login, por eso usuario_id es opcional.
 if object_id('dbo.empleados', 'U') is null
 begin
     create table dbo.empleados (

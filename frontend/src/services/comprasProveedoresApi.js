@@ -20,6 +20,16 @@ async function handleResponse(response) {
 }
 
 // --- Proveedores ---
+// La API devuelve razon_social y activo (boolean). Las pantallas trabajan con
+// nombre y estado ('Activo' / 'Inactivo'), así que se traducen aquí, en un solo lugar.
+export function normalizarProveedor(p) {
+  return {
+    ...p,
+    nombre: p.razon_social || p.nombre_comercial || p.nombre || '',
+    estado: p.activo === false ? 'Inactivo' : 'Activo',
+  };
+}
+
 export async function listarProveedores(filtros = {}, signal) {
   const params = new URLSearchParams();
   if (filtros.busqueda) params.set('busqueda', filtros.busqueda);
@@ -28,7 +38,9 @@ export async function listarProveedores(filtros = {}, signal) {
   const query = params.toString();
   const url = query ? `/api/proveedores?${query}` : '/api/proveedores';
   const response = await fetch(url, { headers: getAuthHeaders(), signal });
-  return handleResponse(response);
+  const filas = await handleResponse(response);
+  const lista = Array.isArray(filas) ? filas : (filas?.proveedores ?? []);
+  return lista.map(normalizarProveedor);
 }
 
 export async function crearProveedor(datos) {

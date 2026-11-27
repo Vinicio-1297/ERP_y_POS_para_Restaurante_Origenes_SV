@@ -32,8 +32,7 @@ export default function ResumenTurno({ resumen, movimientos }) {
         </tbody>
       </Table>
       <p className="caja-note">
-        Digital incluye Bitcoin {formatUsd(ventas.bitcoinCents)} y Chivo {formatUsd(ventas.chivoCents)}. El efectivo esperado suma
-        apertura, ventas e ingresos, y resta egresos.
+        El efectivo esperado suma apertura, ventas e ingresos, y resta egresos.
       </p>
 
       <h3>Movimientos</h3>
