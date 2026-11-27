@@ -1,0 +1,2 @@
+-- Marcador para datos iniciales de desarrollo.
+-- Agregar sentencias seed cuando exista el esquema de base de datos.
