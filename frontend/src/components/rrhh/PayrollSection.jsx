@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Col, FormGroup, Input, Label, Row, Table } from 'reactstrap';
+import { Alert, Button, Col, FormGroup, Input, Label, Row, Table } from 'reactstrap';
 import { formatUsd } from '../../utils/moneyInput.js';
 
 const hoy = new Date();
@@ -20,6 +20,8 @@ export default function PayrollSection({
   onVerBoleta,
   onCerrarBoleta,
   enviando,
+  error = '',
+  sinEmpleados = false,
 }) {
   const [form, setForm] = useState(FORM_PLANILLA);
   const cambiar = (campo) => (event) => setForm({ ...form, [campo]: event.target.value });
@@ -49,6 +51,14 @@ export default function PayrollSection({
   return (
     <section className="rrhh-card">
       <h3>Planilla quincenal</h3>
+
+      {/* El error se muestra aquí mismo: el aviso de arriba de la página queda fuera de vista al bajar. */}
+      {error && <Alert color="danger" className="no-print" role="alert">{error}</Alert>}
+      {sinEmpleados && !error && (
+        <Alert color="warning" className="no-print">
+          No hay empleados activos registrados. Registrá al menos un empleado antes de generar la planilla.
+        </Alert>
+      )}
 
       <form onSubmit={generar} className="mb-3 no-print">
         <Row>
@@ -85,7 +95,9 @@ export default function PayrollSection({
             </FormGroup>
           </Col>
         </Row>
-        <Button type="submit" color="primary" disabled={!valido || enviando}>Generar planilla</Button>
+        <Button type="submit" color="primary" disabled={!valido || enviando}>
+          {enviando ? 'Generando...' : 'Generar planilla'}
+        </Button>
       </form>
 
       {planillas.length === 0 ? (

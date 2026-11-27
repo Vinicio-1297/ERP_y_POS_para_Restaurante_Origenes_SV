@@ -43,29 +43,71 @@
   .rrhh-grid { grid-template-columns: 1fr; }
 }
 
+/* Imprimir únicamente la boleta de pago */
 @media print {
-  .no-print,
-  nav,
-  aside,
-  header {
+  body:has(.rrhh-boleta),
+  body:has(.rrhh-boleta) #root,
+  body:has(.rrhh-boleta) *:has(.rrhh-boleta) {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  body:has(.rrhh-boleta) * {
+    visibility: hidden;
+  }
+
+  body:has(.rrhh-boleta) .rrhh-boleta,
+  body:has(.rrhh-boleta) .rrhh-boleta * {
+    visibility: visible !important;
+  }
+
+  body:has(.rrhh-boleta) .no-print,
+  body:has(.rrhh-boleta) nav,
+  body:has(.rrhh-boleta) aside,
+  body:has(.rrhh-boleta) header,
+  body:has(.rrhh-boleta) .rrhh-boleta button {
     display: none !important;
   }
 
-  .rrhh-page {
-    padding: 0;
-  }
-
-  .rrhh-card:has(.rrhh-boleta) {
-    border: none;
-    background: #fff;
-    padding: 0;
-  }
-
-  .rrhh-card:not(:has(.rrhh-boleta)) {
-    display: none;
-  }
-
-  .rrhh-boleta {
+  body:has(.rrhh-boleta) .rrhh-boleta {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-sizing: border-box;
+    padding: 20px;
+    margin: 0;
     border: 1px solid #000;
+    border-radius: 0;
+    background: #fff !important;
+    color: #000 !important;
+    break-inside: avoid;
+  }
+
+  .rrhh-boleta table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+
+  .rrhh-boleta h2,
+  .rrhh-boleta h3,
+  .rrhh-boleta h4 {
+    color: #000 !important;
   }
 }

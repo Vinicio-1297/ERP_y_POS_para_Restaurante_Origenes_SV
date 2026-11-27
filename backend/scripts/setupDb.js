@@ -34,7 +34,8 @@ const seedsDemo = [
   '../database/inventario/seed/01_insumos.sql',
   '../database/inventario/seed/02_recetas_demo.sql',
   '../database/inventario/seed/03_stock_demo.sql',
-  '../database/compras/seed/01_proveedores.sql'
+  '../database/compras/seed/01_proveedores.sql',
+  '../database/compras/seed/02_proveedor_insumo.sql'
 ];
 
 // comprobar las variables necesarias

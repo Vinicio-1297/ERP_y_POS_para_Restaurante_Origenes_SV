@@ -1,4 +1,5 @@
 const compraRepository = require('../repositories/compraRepository');
+const catalogoRepository = require('../repositories/proveedorInsumoRepository');
 const inventarioService = require('./inventarioService');
 const cuentaPorPagarService = require('./cuentaPorPagarService');
 const { ejecutarEnTransaccion } = require('../config/transaccion');
@@ -22,7 +23,7 @@ function validarId(id, campo = 'ID') {
   }
 }
 
-// Obtener la fecha actual de El Salvador
+// obtener la fecha actual de El Salvador
 function fechaLocal() {
   return new Date(Date.now() - 6 * 60 * 60 * 1000)
     .toISOString()
@@ -53,7 +54,7 @@ function prepararDetalles(detalles) {
       throw crearError('La cantidad debe ser mayor que cero.');
     }
 
-    // La base de datos permite tres decimales.
+    // la base de datos permite tres decimales
     const cantidadMil = Math.round(cantidad * 1000);
 
     if (
@@ -72,7 +73,7 @@ function prepararDetalles(detalles) {
       throw crearError('El costo unitario debe ser un entero válido en centavos.');
     }
 
-    // Comprobar que el calculo no pierda precision
+    // comprobar que el calculo no pierda precision
     const importeMil = cantidadMil * costoUnitarioCents;
 
     if (!Number.isSafeInteger(importeMil)) {
@@ -97,12 +98,12 @@ function prepararDetalles(detalles) {
   });
 }
 
-// Listar compras
+// listar compras
 async function listar(filtros) {
   return await compraRepository.listar(filtros);
 }
 
-// Obtener compra por ID
+// obtener compra por ID
 async function obtenerPorId(id) {
   validarId(id, 'El ID de la compra');
 
@@ -115,13 +116,12 @@ async function obtenerPorId(id) {
   return compra;
 }
 
-// Registrar compra
+// registrar compra
 async function crear(datos, usuarioId) {
   validarId(datos.proveedorId, 'El ID del proveedor');
   validarId(datos.sucursalId, 'El ID de la sucursal');
   validarId(usuarioId, 'El ID del usuario');
 
-  // Validar tambien los datos cuando se llama directamente al servicio
   const validacion = crearCompraSchema.safeParse(datos);
 
   if (!validacion.success) {
@@ -144,14 +144,14 @@ async function crear(datos, usuarioId) {
     throw crearError('El total de la compra excede el valor permitido.');
   }
 
-  // Las compras a credito deben generar una deuda positiva
+  // las compras a credito deben generar una deuda positiva
   if (datos.condicionPago === 'credito' && subtotalCents <= 0) {
     throw crearError(
       'Una compra a crédito debe tener un total mayor que cero.'
     );
   }
 
-  // No permitir facturas con fechas futuras
+  // no permitir facturas con fechas futuras
   if (datos.fechaFactura && datos.fechaFactura > fechaLocal()) {
     throw crearError(
       'La fecha de la factura no puede ser futura.'
@@ -170,6 +170,22 @@ async function crear(datos, usuarioId) {
           'El proveedor no existe o está desactivado.',
           404
         );
+      }
+
+      // comprobar que los insumos pertenezcan al proveedor
+      for (const detalle of detalles) {
+        const permitido = await catalogoRepository.existe(
+          datos.proveedorId,
+          detalle.insumoId,
+          tx
+        );
+
+        if (!permitido) {
+          throw crearError(
+            `El insumo con ID ${detalle.insumoId} no pertenece al catálogo del proveedor.`,
+            400
+          );
+        }
       }
 
       const compra = await compraRepository.crear({
@@ -195,7 +211,7 @@ async function crear(datos, usuarioId) {
     });
 
   } catch (error) {
-    // Controlar facturas duplicadas del mismo proveedor
+    // controlar facturas duplicadas del mismo proveedor
     if (
       (error.number === 2601 || error.number === 2627) &&
       error.message.includes('UX_compras_proveedor_factura')
@@ -210,7 +226,7 @@ async function crear(datos, usuarioId) {
   }
 }
 
-// Recibir compra y actualizar inventario
+// recibir compra y actualizar inventario
 async function recibir(id, usuarioId) {
   validarId(id, 'El ID de la compra');
   validarId(usuarioId, 'El ID del usuario');
@@ -258,7 +274,7 @@ async function recibir(id, usuarioId) {
       );
     }
 
-    // Generar la cuenta por pagar si la compra es a credito
+    // generar la cuenta por pagar si la compra es a credito
     if (compraRecibida.condicion_pago === 'credito') {
       await cuentaPorPagarService.generarDesdeCompra(
         compraRecibida,
@@ -271,7 +287,7 @@ async function recibir(id, usuarioId) {
   });
 }
 
-// Anular compra pendiente
+// anular compra pendiente
 async function anular(id) {
   validarId(id, 'El ID de la compra');
 
