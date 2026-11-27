@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // reemplazar dependencias para trabajar sin base de datos
@@ -106,6 +106,22 @@ reemplazarModulo('../src/config/transaccion', {
     } finally {
       transaccionActiva = null;
     }
+  }
+});
+
+// simular el catalogo de insumos por proveedor
+reemplazarModulo('../src/repositories/proveedorInsumoRepository', {
+  async existe(proveedorId, insumoId, tx) {
+    comprobarTransaccion(tx);
+
+    const catalogos = {
+      1: [1, 2],
+      3: [2]
+    };
+
+    return estado.proveedores.some(
+      p => p.id === proveedorId && p.activo
+    ) && (catalogos[proveedorId] ?? []).includes(insumoId);
   }
 });
 
@@ -1120,4 +1136,39 @@ test('deshace inventario compra y deuda si falla la consulta final', async () =>
   assert.equal(estado.movimientos.length, 0);
   assert.equal(estado.cuentas.length, 0);
   assert.equal(estado.resultadoTransaccion, 'rollback');
+});
+
+// pruebas del catalogo de proveedores
+
+test('rechaza comprar un insumo fuera del catalogo del proveedor', async () => {
+  reiniciar();
+
+  await assert.rejects(
+    servicio.crear({
+      ...compraBase,
+      proveedorId: 3
+    }, 1),
+    error =>
+      error.status === 400 &&
+      error.message.includes('no pertenece al catálogo')
+  );
+
+  assert.equal(estado.compras.length, 0);
+  assert.equal(estado.detalles.length, 0);
+  assert.equal(estado.resultadoTransaccion, 'rollback');
+});
+
+test('permite comprar insumos del catalogo del proveedor', async () => {
+  reiniciar();
+
+  const compra = await servicio.crear({
+    ...compraBase,
+    proveedorId: 3,
+    detalles: [compraBase.detalles[1]]
+  }, 1);
+
+  assert.equal(compra.proveedor_id, 3);
+  assert.equal(compra.detalles.length, 1);
+  assert.equal(compra.detalles[0].insumo_id, 2);
+  assert.equal(estado.resultadoTransaccion, 'commit');
 });

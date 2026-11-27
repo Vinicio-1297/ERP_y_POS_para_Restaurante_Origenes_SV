@@ -57,8 +57,11 @@ export async function listarProductosPOS(signal) {
   if (!Array.isArray(productos) || !Array.isArray(categorias)) {
     throw new Error('La API no devolvió el catálogo de productos esperado.');
   }
+  if (productos.some(p => !['elaborado', 'reventa'].includes(p.tipoProducto))) {
+    throw new Error('La API devolvió productos sin un tipo válido. Actualizá el backend para consultar Recetas.');
+  }
   const nombres = new Map(categorias.map(c => [String(c.id), c.nombre]));
-  return productos.map(p => ({
+  return productos.filter(p => p.tipoProducto === 'elaborado').map(p => ({
     id: p.id,
     name: p.nombre,
     category: nombres.get(String(p.categoriaId)) || 'Sin categoría',
@@ -72,17 +75,23 @@ export async function listarRecetas(signal) {
     throw new Error('La API no devolvio una lista de recetas.');
   }
 
-  return datos.map(receta => ({
-    ...receta,
-    id: String(receta.id),
-    productoId: String(receta.productoId),
-    rendimiento: Number(receta.rendimiento),
-    ingredientes: receta.ingredientes.map(ingrediente => ({
-      ...ingrediente,
-      insumoId: String(ingrediente.insumoId),
-      cantidad: Number(ingrediente.cantidad),
-    })),
-  }));
+  return datos.map(receta => {
+    if (!Array.isArray(receta.ingredientes)) {
+      throw new Error('La API devolvió una receta sin una lista de ingredientes válida.');
+    }
+
+    return {
+      ...receta,
+      id: String(receta.id),
+      productoId: String(receta.productoId),
+      rendimiento: Number(receta.rendimiento),
+      ingredientes: receta.ingredientes.map(ingrediente => ({
+        ...ingrediente,
+        insumoId: String(ingrediente.insumoId),
+        cantidad: Number(ingrediente.cantidad),
+      })),
+    };
+  });
 }
 
 // registrar una receta

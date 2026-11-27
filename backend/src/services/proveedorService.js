@@ -156,10 +156,32 @@ async function desactivar(id) {
   return await proveedorRepository.desactivar(id);
 }
 
+// Reactivar proveedor
+async function activar(id) {
+  const proveedor = await proveedorRepository.obtenerPorId(id);
+
+  if (!proveedor) {
+    throw crearError('Proveedor no encontrado.', 404);
+  }
+
+  if (proveedor.activo) {
+    throw crearError('El proveedor ya está activo.', 400);
+  }
+
+  const actualizado = await proveedorRepository.activar(id);
+
+  if (!actualizado) {
+    throw crearError('El proveedor cambió de estado. Actualizá el listado e intentá de nuevo.', 409);
+  }
+
+  return actualizado;
+}
+
 module.exports = {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   desactivar,
+  activar,
 };

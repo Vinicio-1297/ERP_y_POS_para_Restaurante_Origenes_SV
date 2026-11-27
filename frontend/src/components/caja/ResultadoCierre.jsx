@@ -14,7 +14,7 @@ export default function ResultadoCierre({ resultado }) {
   const filas = [
     ['Efectivo', esperado.efectivoCents, resultado.diferencias.efectivoCents],
     ['Tarjeta', esperado.tarjetaCents, resultado.diferencias.tarjetaCents],
-    ['Digital (Bitcoin/Chivo)', esperado.digitalCents, resultado.diferencias.digitalCents],
+    ['Digital', esperado.digitalCents, resultado.diferencias.digitalCents],
   ];
 
   return (

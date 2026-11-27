@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { recetasService, comprasService } from '../services/gestionRepository.js';
 import {
-  listarSucursales, listarInventario, crearArticulo, actualizarArticulo,
+  listarRecetas, listarSucursales, listarInventario, crearArticulo, actualizarArticulo,
   desactivarArticulo, actualizarMinimo, ajustarExistencia,
 } from '../services/gestionApi.js';
 import { dollarsToCents, centsFor, formatMoney, validQuantity, suggestedPurchase } from '../utils/gestionUtils.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
-import { isAdmin, canAccessModule, canCreate, MODULES } from '../utils/permissions.js';
+import { isAdmin, isManager, canAccessModule, canCreate, MODULES } from '../utils/permissions.js';
 import '../styles/inventario-feature.css';
+
+// Categorías disponibles para los artículos (las mismas que usan los datos iniciales).
+const CATEGORIAS = [
+  'Aceites', 'Bebidas', 'Carnes', 'Condimentos', 'Frutas', 'Granos y harinas',
+  'Lacteos', 'Panaderia', 'Proteinas', 'Vegetales', 'Otros',
+];
 
 const EMPTY_FORM = {
   nombre: '', tipo: 'insumo', categoria: '', unidad: 'g',
@@ -41,7 +46,7 @@ export default function InventarioPage() {
   const [usuario] = useState(readUser);
   const esAdministrador = isAdmin();
   const puedeVer = canAccessModule(MODULES.INVENTARIO);
-  const puedeRegistrarCompra = canCreate(MODULES.COMPRAS);
+  const puedeRegistrarCompra = canCreate(MODULES.COMPRAS) || isManager();
   const [sucursales, setSucursales] = useState([]);
   const [sucursalId, setSucursalId] = useState('');
   const [products, setProducts] = useState([]);
@@ -54,6 +59,8 @@ export default function InventarioPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [viewProduct, setViewProduct] = useState(null);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -107,6 +114,13 @@ export default function InventarioPage() {
     setForm(EMPTY_FORM);
   };
   const dialogRef = useGestionModal(showForm, closeForm);
+  const viewDialogRef = useGestionModal(Boolean(viewProduct), () => setViewProduct(null));
+
+  const opcionesCategoria = useMemo(() => {
+    const usadas = products.map(p => p.categoria).filter(Boolean);
+    return [...new Set([...CATEGORIAS, ...usadas, form.categoria].filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
+  }, [products, form.categoria]);
 
   const filtered = useMemo(() => products.filter(product => {
     const query = `${product.nombre} ${product.categoria} ${product.codigo || ''}`.toLowerCase();
@@ -127,21 +141,30 @@ export default function InventarioPage() {
   function openForm(product = null) {
     if (busy || loading || !sucursalId || (!esAdministrador && !product)) return;
     setForm(product ? {
-      ...EMPTY_FORM, ...product,
-      stock: String(product.stock), minimo: String(product.minimo),
-      precioVenta: product.tipo === 'reventa' ? String(centsFor(product, 'precioVentaCents', 'precioVenta') / 100) : '',
+      ...EMPTY_FORM,
+      ...product,
+      nombre: product.nombre ?? '',
+      categoria: product.categoria ?? '',
+      codigo: product.codigo ?? '',
+      stock: String(product.stock ?? 0),
+      minimo: String(product.minimo ?? 0),
+      precioVenta: product.tipo === 'reventa'
+        ? String(centsFor(product, 'precioVentaCents', 'precioVenta') / 100)
+        : '',
     } : EMPTY_FORM);
     setEditingId(product?.id || null);
     setError('');
+    setNotice('');
+    setViewProduct(null);
     setShowForm(true);
   }
 
   async function save(event) {
     event.preventDefault();
     if (busy || !sucursalId || (!esAdministrador && !editingId)) return;
-    const nombre = form.nombre.trim();
-    const categoria = form.categoria.trim();
-    const codigo = form.codigo.trim();
+    const nombre = String(form.nombre ?? '').trim();
+    const categoria = String(form.categoria ?? '').trim();
+    const codigo = (form.codigo ?? '').trim();
     const stock = Number(form.stock);
     const minimo = Number(form.minimo);
     const precioVentaCents = form.tipo === 'reventa' ? dollarsToCents(form.precioVenta) : null;
@@ -156,7 +179,10 @@ export default function InventarioPage() {
     if (!['insumo', 'reventa'].includes(form.tipo) || !['g', 'kg', 'ml', 'l', 'unidad'].includes(form.unidad)) {
       setError('Seleccioná un tipo y una unidad válidos.'); return;
     }
-    if (products.some(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase() && String(p.id) !== String(editingId))) {
+    if (products.some(p =>
+      String(p.nombre ?? '').trim().toLowerCase() === nombre.toLowerCase() &&
+      String(p.id) !== String(editingId)
+    )) {
       setError('Ya existe un artículo con ese nombre.'); return;
     }
     if (form.tipo === 'reventa') {
@@ -164,7 +190,10 @@ export default function InventarioPage() {
       if (precioVentaCents === null || precioVentaCents <= 0 || precioVentaCents > 2147483647) {
         setError('Ingresá un precio mayor que $0, con máximo dos decimales.'); return;
       }
-      if (products.some(p => p.tipo === 'reventa' && p.codigo?.toLowerCase() === codigo.toLowerCase() && String(p.id) !== String(editingId))) {
+      if (products.some(p => p.tipo === 'reventa' &&
+        String(p.codigo ?? '').toLowerCase() === codigo.toLowerCase() &&
+        String(p.id) !== String(editingId)
+      )) {
         setError('El código de reventa ya está registrado.'); return;
       }
     }
@@ -183,6 +212,7 @@ export default function InventarioPage() {
 
     setBusy(true);
     setError('');
+    setNotice('');
     let pasoGuardado = false;
     try {
       let id = editingId;
@@ -213,6 +243,7 @@ export default function InventarioPage() {
       }
       closeForm();
       await cargar(sucursalId);
+      setNotice(pasoGuardado ? 'Artículo guardado correctamente.' : 'No había cambios que guardar.');
     } catch (err) {
       if (pasoGuardado) {
         closeForm();
@@ -227,23 +258,33 @@ export default function InventarioPage() {
   }
 
   async function deleteProduct(product) {
-    if (!esAdministrador || busy) return;
-    const usada = recetasService.list().filter(r => r.ingredientes?.some(i => String(i.insumoId) === String(product.id)));
-    if (usada.length) {
-      window.alert(`No se puede eliminar «${product.nombre}»: se utiliza en ${usada.length} receta(s).`); return;
-    }
-    const comprado = comprasService.list().some(c => c.lineas?.some(l => String(l.inventarioId) === String(product.id)));
-    if (comprado) {
-      window.alert(`No se puede eliminar «${product.nombre}»: figura en facturas de compra.`); return;
-    }
-    if (!window.confirm(`¿Desactivar "${product.nombre}" del inventario?`)) return;
-    setBusy(true);
+    if (!esAdministrador || busy || !product) return;
+    const informarError = (mensaje) => {
+      setPageError(mensaje);
+      if (showForm) setError(mensaje);
+    };
     setPageError('');
+    setNotice('');
+    if (Number(product.stock) > 0) {
+      informarError('Antes de eliminar un artículo del inventario, sus existencias deben estar en cero en todas las sucursales.');
+      return;
+    }
+    if (!window.confirm(`¿Eliminar "${product.nombre}" del inventario activo? Se desactivará, pero su historial de compras y movimientos se conservará.`)) return;
+    setBusy(true);
     try {
+      if (product.tipo === 'insumo') {
+        const recetas = await listarRecetas();
+        if (recetas.some(r => (r.ingredientes || []).some(i => String(i.insumoId) === String(product.id)))) {
+          informarError('No se puede eliminar este insumo del inventario activo porque aparece en una receta vigente.');
+          return;
+        }
+      }
       await desactivarArticulo(product.id);
+      closeForm();
       await cargar(sucursalId);
+      setNotice('Artículo retirado del inventario activo. Se conservó su historial.');
     } catch (err) {
-      setPageError(`No se pudo desactivar el artículo: ${err.message}`);
+      informarError(`No se pudo eliminar el artículo del inventario activo: ${err.message}`);
     } finally {
       setBusy(false);
     }
@@ -261,7 +302,7 @@ export default function InventarioPage() {
       </header>
       <div className="frontb-toolbar inv-sync">
         <label>Sucursal
-          <select aria-label="Sucursal de inventario" value={sucursalId} disabled={busy || showForm} onChange={e => setSucursalId(e.target.value)}>
+          <select aria-label="Sucursal de inventario" value={sucursalId} disabled={busy || showForm || !!viewProduct} onChange={e => setSucursalId(e.target.value)}>
             {!sucursalId && <option value="">Seleccioná una sucursal</option>}
             {sucursales.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
           </select>
@@ -269,6 +310,7 @@ export default function InventarioPage() {
         <button type="button" className="inv-secondary" disabled={!sucursalId || busy || loading} onClick={() => cargar(sucursalId)}>Actualizar listado</button>
         {loading && <p role="status">Cargando inventario...</p>}
         {pageError && <p className="inv-error" role="alert">{pageError}</p>}
+        {notice && <p className="inv-notice" role="status">{notice}</p>}
       </div>
       <div className="inv-stats">
         <article><span>Artículos registrados</span><strong>{stats.total}</strong></article>
@@ -292,8 +334,9 @@ export default function InventarioPage() {
             <td>{p.tipo === 'reventa' ? formatMoney(centsFor(p, 'precioVentaCents', 'precioVenta')) : '—'}</td>
             <td><span className={`inv-status inv-${getStatus(p).toLowerCase().replace(' ', '-')}`}>{getStatus(p)}</span></td>
             <td><div className="inv-actions">
-              <button type="button" disabled={busy} onClick={() => openForm(p)}>{esAdministrador ? 'Editar' : 'Ajustar stock'}</button>
-              {esAdministrador && <button type="button" disabled={busy} onClick={() => deleteProduct(p)}>Desactivar</button>}
+              <button type="button" className="frontb-row-view" disabled={busy} onClick={() => setViewProduct(p)}>Ver</button>
+              <button type="button" disabled={busy || loading} onClick={() => openForm(p)}>{esAdministrador ? 'Editar' : 'Ajustar stock'}</button>
+              {esAdministrador && <button type="button" disabled={busy || loading} title={Number(p.stock) > 0 ? 'Solo se puede retirar un artículo sin existencias en todas las sucursales' : 'Retira el artículo del inventario activo conservando su historial'} onClick={() => deleteProduct(p)}>Eliminar</button>}
             </div></td>
           </tr>) : <tr><td className="inv-empty" colSpan="7">{loading ? 'Cargando...' : 'No hay artículos para mostrar.'}</td></tr>}</tbody>
         </table></div>
@@ -316,15 +359,42 @@ export default function InventarioPage() {
           <form onSubmit={save}>
             <label>Tipo de artículo <select disabled={!!editingId || !esAdministrador || busy} value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value, unidad: e.target.value === 'reventa' ? 'unidad' : 'g' })}><option value="insumo">Insumo</option><option value="reventa">Producto de reventa</option></select></label>
             <label>Nombre <input required maxLength={120} disabled={!esAdministrador || busy} value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></label>
-            <div className="inv-field-grid"><label>Categoría <input required maxLength={100} disabled={!esAdministrador || busy} value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} /></label>
+            <div className="inv-field-grid"><label>Categoría <select required disabled={!esAdministrador || busy} value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })}>
+                <option value="">Seleccioná una categoría...</option>
+                {opcionesCategoria.map(c => <option key={c} value={c}>{c}</option>)}
+              </select></label>
               <label>Unidad <select disabled={!!editingId || !esAdministrador || busy} value={form.unidad} onChange={e => setForm({ ...form, unidad: e.target.value })}><option>g</option><option>kg</option><option>ml</option><option>l</option><option>unidad</option></select></label></div>
             <div className="inv-field-grid"><label>Existencia <input type="number" min="0" step={form.unidad === 'unidad' ? '1' : '0.001'} disabled={busy} value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label>
               <label>Stock mínimo <input type="number" min="0" step={form.unidad === 'unidad' ? '1' : '0.001'} disabled={busy} value={form.minimo} onChange={e => setForm({ ...form, minimo: e.target.value })} /></label></div>
             {form.tipo === 'reventa' && <div className="inv-field-grid"><label>Código <input required maxLength={50} disabled={!esAdministrador || busy} value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} /></label>
               <label>Precio de venta ($) <input required type="number" min="0" step="0.01" disabled={!esAdministrador || busy} value={form.precioVenta} onChange={e => setForm({ ...form, precioVenta: e.target.value })} /></label></div>}
             {error && <p className="inv-error" role="alert">{error}</p>}
-            <div className="inv-form-actions"><button type="button" className="inv-secondary" disabled={busy} onClick={closeForm}>Cancelar</button><button type="submit" className="inv-primary" disabled={busy}>{busy ? 'Guardando...' : 'Guardar'}</button></div>
+            <div className="inv-form-actions">
+              {esAdministrador && editingId &&
+                <button type="button" className="inv-secondary" disabled={busy} onClick={() => deleteProduct(products.find(p => String(p.id) === String(editingId)))}>Eliminar</button>}
+              <button type="button" className="inv-secondary" disabled={busy} onClick={closeForm}>Cancelar</button>
+              <button type="submit" className="inv-primary" disabled={busy}>{busy ? 'Guardando...' : 'Guardar'}</button>
+            </div>
           </form>
+        </div>
+      </div>}
+      {viewProduct && <div className="inv-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setViewProduct(null); }}>
+        <div className="inv-dialog frontb-detail-panel" ref={viewDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="inv-view-title">
+          <div className="inv-dialog-head"><h2 id="inv-view-title">{viewProduct.nombre}</h2><button type="button" aria-label="Cerrar" onClick={() => setViewProduct(null)}>×</button></div>
+          <dl className="frontb-details">
+            <div><dt>Tipo</dt><dd>{viewProduct.tipo === 'reventa' ? 'Producto de reventa' : 'Insumo'}</dd></div>
+            <div><dt>Categoría</dt><dd>{viewProduct.categoria}</dd></div>
+            <div><dt>Unidad</dt><dd>{viewProduct.unidad}</dd></div>
+            <div><dt>Existencia en esta sucursal</dt><dd>{viewProduct.stock} {viewProduct.unidad}</dd></div>
+            <div><dt>Stock mínimo</dt><dd>{viewProduct.minimo} {viewProduct.unidad}</dd></div>
+            <div><dt>Estado</dt><dd>{getStatus(viewProduct)}</dd></div>
+            {viewProduct.codigo && <div><dt>Código</dt><dd>{viewProduct.codigo}</dd></div>}
+            {viewProduct.tipo === 'reventa' && <div><dt>Precio</dt><dd>{formatMoney(centsFor(viewProduct, 'precioVentaCents', 'precioVenta'))}</dd></div>}
+          </dl>
+          <div className="inv-form-actions">
+            <button type="button" className="inv-secondary" onClick={() => setViewProduct(null)}>Cerrar</button>
+            <button type="button" className="inv-primary" onClick={() => openForm(viewProduct)}>{esAdministrador ? 'Editar' : 'Ajustar stock'}</button>
+          </div>
         </div>
       </div>}
       </section>
