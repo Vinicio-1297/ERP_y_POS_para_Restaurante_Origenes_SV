@@ -11,6 +11,12 @@ import GestionNav from '../components/gestion/GestionNav.jsx';
 import { isAdmin, canAccessModule, canCreate, MODULES } from '../utils/permissions.js';
 import '../styles/inventario-feature.css';
 
+// Categorías disponibles para los artículos (las mismas que usan los datos iniciales).
+const CATEGORIAS = [
+  'Aceites', 'Bebidas', 'Carnes', 'Condimentos', 'Frutas', 'Granos y harinas',
+  'Lacteos', 'Panaderia', 'Proteinas', 'Vegetales', 'Otros',
+];
+
 const EMPTY_FORM = {
   nombre: '', tipo: 'insumo', categoria: '', unidad: 'g',
   stock: '0', minimo: '0', codigo: '', precioVenta: '',
@@ -107,6 +113,12 @@ export default function InventarioPage() {
     setForm(EMPTY_FORM);
   };
   const dialogRef = useGestionModal(showForm, closeForm);
+
+  const opcionesCategoria = useMemo(() => {
+    const usadas = products.map(p => p.categoria).filter(Boolean);
+    return [...new Set([...CATEGORIAS, ...usadas, form.categoria].filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
+  }, [products, form.categoria]);
 
   const filtered = useMemo(() => products.filter(product => {
     const query = `${product.nombre} ${product.categoria} ${product.codigo || ''}`.toLowerCase();
@@ -318,7 +330,10 @@ export default function InventarioPage() {
           <form onSubmit={save}>
             <label>Tipo de artículo <select disabled={!!editingId || !esAdministrador || busy} value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value, unidad: e.target.value === 'reventa' ? 'unidad' : 'g' })}><option value="insumo">Insumo</option><option value="reventa">Producto de reventa</option></select></label>
             <label>Nombre <input required maxLength={120} disabled={!esAdministrador || busy} value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></label>
-            <div className="inv-field-grid"><label>Categoría <input required maxLength={100} disabled={!esAdministrador || busy} value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} /></label>
+            <div className="inv-field-grid"><label>Categoría <select required disabled={!esAdministrador || busy} value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })}>
+                <option value="">Seleccioná una categoría...</option>
+                {opcionesCategoria.map(c => <option key={c} value={c}>{c}</option>)}
+              </select></label>
               <label>Unidad <select disabled={!!editingId || !esAdministrador || busy} value={form.unidad} onChange={e => setForm({ ...form, unidad: e.target.value })}><option>g</option><option>kg</option><option>ml</option><option>l</option><option>unidad</option></select></label></div>
             <div className="inv-field-grid"><label>Existencia <input type="number" min="0" step={form.unidad === 'unidad' ? '1' : '0.001'} disabled={busy} value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label>
               <label>Stock mínimo <input type="number" min="0" step={form.unidad === 'unidad' ? '1' : '0.001'} disabled={busy} value={form.minimo} onChange={e => setForm({ ...form, minimo: e.target.value })} /></label></div>

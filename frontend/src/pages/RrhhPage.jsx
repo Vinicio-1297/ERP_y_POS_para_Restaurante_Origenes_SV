@@ -203,6 +203,8 @@ export default function RrhhPage() {
             onVerBoleta={handleVerBoleta}
             onCerrarBoleta={() => setBoleta(null)}
             enviando={enviando}
+            error={error}
+            sinEmpleados={empleados.length === 0}
           />
         </>
       )}
