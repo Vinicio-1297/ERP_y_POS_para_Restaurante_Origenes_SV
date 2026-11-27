@@ -17,6 +17,7 @@ import {
   getBoletaEmpleado,
   getPlanillaDetalle,
   getPlanillas,
+  recalcularPlanilla,
 } from '../services/payrollService.js';
 import '../styles/rrhh.css';
 
@@ -142,6 +143,17 @@ export default function RrhhPage() {
       setBoleta(null);
     });
 
+  
+  const handleRecalcularPlanilla = (id) =>
+    ejecutar(async () => {
+      if (!window.confirm('¿Recalcular esta planilla con los empleados activos actuales?')) return;
+      await recalcularPlanilla(id);
+      await cargarPlanillas();
+      setPlanillaDetalle(await getPlanillaDetalle(id));
+      setBoleta(null);
+  });
+
+
   const handleVerBoleta = (planillaId, empleadoId) =>
     ejecutar(async () => {
       setBoleta(await getBoletaEmpleado(planillaId, empleadoId));
@@ -200,6 +212,7 @@ export default function RrhhPage() {
             boleta={boleta}
             onGenerar={handleGenerarPlanilla}
             onSeleccionarPlanilla={handleSeleccionarPlanilla}
+            onRecalcular={handleRecalcularPlanilla}
             onVerBoleta={handleVerBoleta}
             onCerrarBoleta={() => setBoleta(null)}
             enviando={enviando}

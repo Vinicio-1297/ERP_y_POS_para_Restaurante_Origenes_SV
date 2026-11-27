@@ -20,3 +20,5 @@ export const getBoletaEmpleado = (planillaId, empleadoId, signal) =>
   request(`/planillas/${planillaId}/boletas/${empleadoId}`, { signal });
 
 export const generarPlanilla = (datos) => post('/planillas', datos);
+
+export const recalcularPlanilla = (id) => post(`/planillas/${id}/recalcular`, {});

@@ -760,3 +760,10 @@
   overflow-wrap: normal;
   word-break: normal;
 }
+
+.prv-table-wrap th:nth-child(4) {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  min-width: 110px;
+}
