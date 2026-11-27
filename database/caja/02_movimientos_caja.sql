@@ -9,11 +9,11 @@ begin
         concepto nvarchar(200) not null,
         fecha datetime2 not null default sysutcdatetime(),
 
-        constraint ck_movimientos_tipo
+        constraint ck_movimientos_caja_tipo
             check (tipo in ('ingreso', 'egreso')),
-        constraint ck_movimientos_monto
+        constraint ck_movimientos_caja_monto
             check (monto_cents > 0),
-        constraint fk_movimientos_turno
+        constraint fk_movimientos_caja_turno
             foreign key (turno_id) references dbo.turnos_caja(id)
     );
 end;
