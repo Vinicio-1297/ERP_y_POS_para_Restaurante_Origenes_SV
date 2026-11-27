@@ -1,8 +1,3 @@
-/* Front B — misma estructura de contenido aprobada, dentro del AppLayout de Vinicio.
-   Únicamente se modifican estilos de Front B. Nada oculta ni reemplaza la topbar
-   o el menú lateral de la app, ni cambia las funciones de los módulos. */
-
-/* El contenedor del POS ya tiene fondo amarillo, sidebar y topbar propios. */
 .app-shell:has(.frontb-workspace) .app-content {
   overflow-x: hidden;
   overflow-y: auto;
@@ -44,7 +39,7 @@
   color: var(--frontb-ink);
   font: inherit;
 }
-/* Navegación SOLO entre submódulos; no se crea otra barra lateral. */
+
 .frontb-workspace > .frontb-nav {
   display: flex;
   position: static;
@@ -82,7 +77,6 @@
   color: #fff;
 }
 
-/* Distribución interna: tarjetas, lista/tabla y panel lateral. */
 .frontb-eyebrow { display:block; color:#876b53; font-size:10px; letter-spacing:.12em; font-weight:750; margin-bottom:13px; }
 .frontb-workspace :is(.inv-header,.rec-header,.cmp-header,.prv-header,.cpp-head) {
   display:flex;
@@ -270,15 +264,13 @@
 .frontb-workspace :is(.rec-stats,.cpp-stats) {grid-template-columns: repeat(3,minmax(0,1fr));}
 .frontb-workspace .rec-panel .rec-table-wrap {overflow-x:auto;}
 
-/* Recetas y cuentas por pagar tienen tres indicadores. Compras y
-   proveedores tienen cuatro; se conserva una fila uniforme para cada módulo. */
 .frontb-workspace :is(.rec-stats,.cpp-stats) {
   grid-template-columns: repeat(3,minmax(0,1fr));
 }
 .frontb-workspace :is(.cmp-stats,.prv-stats) {
   grid-template-columns: repeat(4,minmax(0,1fr));
 }
-/* Dejar un borde visible en los paneles sobre el amarillo de Vinicio. */
+
 .frontb-workspace :is(.inv-panel,.rec-panel,.cmp-panel,.prv-panel,.cpp-panel) {
   background: var(--frontb-card);
   border-color: var(--frontb-border);
@@ -293,13 +285,13 @@
 .frontb-workspace .inv-stats article:nth-child(2) strong,
 .frontb-workspace .cpp-stats article:nth-child(3) strong { color: #b27c19; }
 .frontb-workspace .inv-stats article:nth-child(3) strong { color: #bb5544; }
-/* Mantener el panel de detalle junto a la tabla en escritorio. */
+
 .frontb-workspace .frontb-split { grid-template-columns: minmax(0,1fr) minmax(220px,28%); }
 .frontb-workspace .frontb-split--recipes { grid-template-columns: minmax(0,1fr) minmax(265px,36%); }
 .frontb-workspace :is(.frontb-split--purchases,.frontb-split--providers,.frontb-split--payables) {
   grid-template-columns: minmax(0,1fr) minmax(245px,30%);
 }
-/* Tablas con desplazamiento propio si hacen falta más columnas. */
+
 .frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.cmp-table-wrap,.prv-table-wrap,.cpp-table-scroll) {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -349,10 +341,6 @@
   .frontb-workspace .rec-panel-head input {width:100%;max-width:none;flex:1 1 100%;}
 }
 
-/* Ajuste localizado del 26/11: sin cambios de lógica, JSX ni estilos del layout de Vinicio. */
-
-/* Inventario: alinear buscador con la parte inferior de los selectores,
-   manteniendo sus etiquetas arriba. */
 .frontb-workspace .inv-filters {
   align-items: flex-end;
   gap: 12px;
@@ -372,8 +360,6 @@
   margin: 0;
 }
 
-/* Tablas más legibles: quitar la anchura mínima obligatoria en escritorio y
-   distribuir el espacio disponible entre las columnas. */
 .frontb-workspace :is(.inv-table, .cmp-table-wrap table, .cpp-table-scroll table) {
   width: 100%;
   min-width: 0;
@@ -399,7 +385,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Inventario: columnas ajustadas, acciones en dos filas si no hay espacio. */
 .frontb-workspace .inv-table :is(th,td):nth-child(1) {width: 22%;}
 .frontb-workspace .inv-table :is(th,td):nth-child(2) {width: 9%;}
 .frontb-workspace .inv-table :is(th,td):nth-child(3) {width: 12%;}
@@ -424,7 +409,6 @@
   line-height: 1.25;
 }
 
-/* Compras: dejar los filtros en una fila independiente del título. */
 .frontb-workspace .cmp-panel-head {
   flex-direction: column;
   align-items: stretch;
@@ -441,8 +425,6 @@
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(6) {width: 12%;}
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(7) {width: 15%;}
 
-/* Cuentas por pagar: la clase cpp-row-actions está en un TD.
-   Mostrar ese TD como flex rompía la alineación de las columnas. */
 .frontb-workspace .cpp-table-scroll td.cpp-row-actions {
   display: table-cell;
   width: 12%;
@@ -470,17 +452,12 @@
 .frontb-workspace .cpp-table-scroll :is(th,td):nth-child(8) {width: 12%;}
 .frontb-workspace .cpp-table-scroll td[colspan] {width: auto;}
 
-/* En pantallas realmente estrechas se conserva el scroll horizontal antes
-   que hacer ilegibles las columnas, pero ya no es obligatorio en escritorio. */
 @container frontb (max-width: 760px) {
   .frontb-workspace .inv-table.inv-table { min-width: 680px; }
   .frontb-workspace .cmp-table-wrap.cmp-table-wrap table { min-width: 735px; }
   .frontb-workspace .cpp-table-scroll.cpp-table-scroll table { min-width: 840px; }
 }
 
-/* Corrección final de tarjetas de Compras y Proveedores.
-   Alinea cuatro indicadores por fila cuando existe espacio; no modifica
-   navegación, barras de Vinicio, datos ni lógica de Front B. */
 .frontb-workspace > .cmp-page > .cmp-stats,
 .frontb-workspace > .prv-page > .prv-stats {
   display: grid;
@@ -508,10 +485,6 @@
   }
 }
 
-
-/* 26/11 - Consistencia general: estructura original de dos paneles.
-   Las cinco pantallas conservan la ficha a la derecha en escritorio,
-   sin cambiar navegación, lógica o estilos globales de Vinicio. */
 .frontb-workspace { container: frontb / inline-size; }
 .frontb-workspace .frontb-split > :first-child,
 .frontb-workspace .frontb-split > aside {
@@ -519,8 +492,6 @@
   max-width: 100%;
 }
 
-/* La tabla se desplaza dentro de SU propio panel si hacen falta columnas.
-   Nunca debe empujar el panel de detalle fuera de la pantalla. */
 .frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.cmp-table-wrap,.prv-table-wrap,.cpp-table-scroll) {
   min-width: 0;
   max-width: 100%;
@@ -528,8 +499,6 @@
   overscroll-behavior-x: contain;
 }
 
-/* Compras: recuperar acciones compactas (no tres botones de ancho completo).
-   Conserva sus funciones, pero evita filas excesivamente altas. */
 .frontb-workspace .cmp-table-wrap .cmp-actions {
   display: flex;
   flex-direction: row;
@@ -550,7 +519,7 @@
   line-height: 1.2;
   white-space: nowrap;
 }
-/* Más espacio para acciones, sin cambiar el orden de la tabla. */
+
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(1) { width: 11%; }
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(2) { width: 16%; }
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(3) { width: 13%; }
@@ -560,7 +529,6 @@
 .frontb-workspace .cmp-table-wrap :is(th,td):nth-child(7) { width: 24%; }
 .frontb-workspace .cmp-table-wrap table { min-width: 760px; }
 
-/* Proveedores: botones compactos y legibles junto a cada registro. */
 .frontb-workspace .prv-table-wrap .prv-actions {
   display: flex;
   align-items: center;
@@ -575,7 +543,6 @@
   white-space: nowrap;
 }
 
-/* Las cinco pantallas siguen la misma regla, sin excepciones por módulo. */
 @container frontb (min-width: 960px) {
   .frontb-workspace .frontb-split.frontb-split--inventory,
   .frontb-workspace .frontb-split.frontb-split--recipes,
@@ -600,8 +567,6 @@
   }
 }
 
-
-/* Accion Ver: misma experiencia en las listas con panel de detalle. */
 .frontb-workspace .frontb-row-view {
   white-space: nowrap;
   min-width: 38px;
@@ -619,10 +584,6 @@
   margin: 2px;
 }
 
-
-/* Ajuste de acciones — todos los módulos usan botones en una sola fila.
-   La tabla conserva su propio desplazamiento horizontal si hace falta espacio.
-   No se modifican la barra, los colores globales ni el panel derecho de Vinicio. */
 .frontb-workspace .inv-table-wrap .inv-actions,
 .frontb-workspace .cmp-table-wrap .cmp-actions,
 .frontb-workspace .prv-table-wrap .prv-actions {
@@ -653,7 +614,7 @@
   line-height: 1.25;
   white-space: nowrap;
 }
-/* Recetas tiene botones directamente dentro del TD, sin contenedor .rec-actions. */
+
 .frontb-workspace .rec-table-wrap tbody td:last-child {
   min-width: 205px;
   white-space: nowrap;
@@ -668,8 +629,7 @@
   padding: 5px 7px;
   white-space: nowrap;
 }
-/* Cuentas por pagar tiene la clase de acciones en el TD: no cambiarlo a flex,
-   porque rompería la alineación entre encabezado y filas. */
+
 .frontb-workspace .cpp-table-scroll td.cpp-row-actions {
   display: table-cell;
   white-space: nowrap;
@@ -687,8 +647,7 @@
   white-space: nowrap;
   vertical-align: middle;
 }
-/* El ancho interno de cada tabla evita cortar el último botón.
-   Solo el listado se desplaza: la ficha derecha permanece visible. */
+
 .frontb-workspace .cmp-table-wrap table {
   min-width: 740px;
 }
@@ -713,20 +672,21 @@
   max-width: 100%;
 }
 
-
-/* 26/11 — Las tablas sin datos de factura se ajustan al panel disponible.
-   Se mantiene overflow-x:auto por seguridad: solo aparece si de verdad no cabe
-   la información, por ejemplo en pantallas pequeñas. No se esconden columnas. */
 .frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) {
   overflow-x: auto;
   overflow-y: hidden;
 }
 .frontb-workspace .inv-table-wrap .inv-table,
-.frontb-workspace .rec-table-wrap table,
 .frontb-workspace .prv-table-wrap table {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
+  white-space: normal;
+}
+.frontb-workspace .rec-table-wrap table {
+  width: 100%;
+  min-width: 1000px;
+  table-layout: auto;
   white-space: normal;
 }
 .frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) :is(th,td) {
@@ -739,11 +699,16 @@
   font-size: 9px;
   line-height: 1.3;
 }
+.frontb-workspace .rec-table-wrap thead th {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 .frontb-workspace :is(.inv-table-wrap,.rec-table-wrap,.prv-table-wrap) td {
   font-size: 11px;
   line-height: 1.4;
 }
-/* Conservar acciones en UNA fila, sin estirar las demás columnas. */
+
 .frontb-workspace .inv-table-wrap .inv-actions,
 .frontb-workspace .prv-table-wrap .prv-actions {
   gap: 3px;
@@ -755,13 +720,13 @@
   padding: 4px 5px;
   font-size: 9px;
 }
-/* No imponer un ancho de 205px al último TD de Recetas. */
+
 .frontb-workspace .rec-table-wrap tbody td:last-child {
   min-width: 0;
   white-space: nowrap;
 }
 .frontb-workspace .rec-table-wrap tbody td:last-child > .rec-link {margin-right: 3px;}
-/* Repartir ancho por significado, no por mínimos arbitrarios de 650-740px. */
+
 .frontb-workspace .rec-table-wrap :is(th,td):nth-child(1) {width: 19%;}
 .frontb-workspace .rec-table-wrap :is(th,td):nth-child(2) {width: 13%;}
 .frontb-workspace .rec-table-wrap :is(th,td):nth-child(3) {width: 13%;}
@@ -774,22 +739,14 @@
 .frontb-workspace .prv-table-wrap :is(th,td):nth-child(4) {width: 10%;}
 .frontb-workspace .prv-table-wrap :is(th,td):nth-child(5) {width: 11%;}
 .frontb-workspace .prv-table-wrap :is(th,td):nth-child(6) {width: 31%;}
-/* Facturas: mantener la barra únicamente cuando las columnas y botones
-   realmente excedan la anchura de la tabla; nunca esconder acciones. */
+
 .frontb-workspace :is(.cmp-table-wrap,.cpp-table-scroll) {overflow-x: auto;}
 
-/* Por debajo de este ancho conviene desplazar tablas en vez de reducir
-   tanto las acciones que se vuelvan difíciles de utilizar. */
 @container frontb (max-width: 780px) {
   .frontb-workspace .inv-table-wrap .inv-table {min-width: 675px;}
-  .frontb-workspace .rec-table-wrap table {min-width: 630px;}
   .frontb-workspace .prv-table-wrap table {min-width: 670px;}
 }
 
-
-/* Corrección puntual: el título FACTURA nunca se divide en FACTUR / A.
-   Se reserva espacio real a esa columna sin quitar el panel lateral ni
-   modificar las acciones. */
 .frontb-workspace .cmp-table-wrap :is(th, td):nth-child(1) { width: 12%; }
 .frontb-workspace .cmp-table-wrap :is(th, td):nth-child(2) { width: 14%; }
 .frontb-workspace .cmp-table-wrap :is(th, td):nth-child(3) { width: 11%; }

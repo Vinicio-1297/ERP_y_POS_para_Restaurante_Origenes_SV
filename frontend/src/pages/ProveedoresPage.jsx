@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { listarProveedores, crearProveedor, actualizarProveedor, desactivarProveedor } from '../services/comprasProveedoresApi.js';
+import { listarProveedores, crearProveedor, actualizarProveedor, desactivarProveedor, activarProveedor } from '../services/comprasProveedoresApi.js';
+import { normalizarProveedor } from '../services/frontbAdapters.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
-import { canCreate, canEdit, canManage, MODULES } from '../utils/permissions.js';
+import { canCreate, canEdit, canManage, isManager, MODULES } from '../utils/permissions.js';
 import '../styles/proveedores-feature.css';
 
 const VACIO = () => ({ nombre: '', nit: '', contacto: '', telefono: '', correo: '', direccion: '' });
@@ -27,12 +28,14 @@ function validar(form, proveedores, editando) {
 }
 
 export default function ProveedoresPage() {
-  const puedeCrear = canCreate(MODULES.PROVEEDORES);
-  const puedeEditar = canEdit();
+  const puedeCrear = canCreate(MODULES.PROVEEDORES) || isManager();
+  const puedeEditar = canEdit() || isManager();
   const puedeCambiarEstado = canManage();
   const [proveedores, setProveedores] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [notice, setNotice] = useState('');
   const [buscar, setBuscar] = useState('');
   const [enfocadoId, setEnfocadoId] = useState(null);
   const [filtro, setFiltro] = useState('Todos');
@@ -41,18 +44,19 @@ export default function ProveedoresPage() {
   const [form, setForm] = useState(VACIO);
   const [error, setError] = useState('');
 
-  // Los proveedores viven en la base de datos: se leen de la API (no de localStorage).
   async function cargar(signal) {
+    setLoading(true);
     try {
-      const filas = await listarProveedores({}, signal);
+      const datos = await listarProveedores({}, signal);
       if (!signal?.aborted) {
-        setProveedores(filas);
-        setError('');
+        if (!Array.isArray(datos)) throw new Error('La API no devolvió una lista de proveedores.');
+        setProveedores(datos.map(normalizarProveedor));
+        setPageError('');
       }
     } catch (err) {
-      if (err.name !== 'AbortError') setError(err.message);
+      if (err.name !== 'AbortError' && !signal?.aborted) setPageError(err.message);
     } finally {
-      if (!signal?.aborted) setCargando(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
@@ -61,8 +65,7 @@ export default function ProveedoresPage() {
     cargar(controller.signal);
     return () => controller.abort();
   }, []);
-
-  const close = () => { setModal(false); setError(''); };
+  const close = () => { if (busy) return; setModal(false); setError(''); };
   const dialogRef = useGestionModal(modal, close);
 
   const lista = useMemo(() => proveedores.filter(p => {
@@ -73,53 +76,64 @@ export default function ProveedoresPage() {
 
   const activos = proveedores.filter(p => p.estado === 'Activo').length;
   const inactivos = proveedores.length - activos;
+  const conCorreo = proveedores.filter(p => p.estado === 'Activo' && p.correo).length;
   const proveedorEnfocado = lista.find(p => String(p.id) === String(enfocadoId)) || lista[0] || null;
 
   function abrir(p = null) {
-    if (p ? !puedeEditar : !puedeCrear) return;
+    if (busy || (p ? !puedeEditar : !puedeCrear)) return;
     setEditando(p?.id ?? null);
     setForm(p ? { nombre: p.nombre, nit: p.nit || '', contacto: p.contacto || '', telefono: telefonoNacional(p.telefono), correo: p.correo || '', direccion: p.direccion || '' } : VACIO());
-    setError(''); setModal(true);
+    setError(''); setNotice(''); setModal(true);
   }
+
   async function guardar(e) {
     e.preventDefault();
-    if (guardando) return;
+    if (busy) return;
     if (!(editando ? puedeEditar : puedeCrear)) return;
-    if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) return;
+    if (!/^\d{4}-?\d{4}$/.test(form.telefono.trim())) { setError('Ingresá un teléfono de 8 dígitos.'); return; }
     const mensaje = validar(form, proveedores, editando);
     if (mensaje) { setError(mensaje); return; }
-
-    // La API usa razon_social; los campos vacíos opcionales se envían como null.
-    const opcional = (texto) => texto.trim() || null;
-    const datos = {
+    const payload = {
       razon_social: form.nombre.trim(),
-      nit: opcional(form.nit),
+      nit: form.nit.trim() || null,
       contacto: form.contacto.trim(),
-      telefono: form.telefono.trim(),
-      correo: opcional(form.correo),
-      direccion: opcional(form.direccion),
+      telefono: telefonoNacional(form.telefono),
+      correo: form.correo.trim() || null,
+      direccion: form.direccion.trim() || null,
     };
-
-    setGuardando(true);
+    setBusy(true);
+    setPageError('');
     try {
-      if (editando) await actualizarProveedor(editando, datos);
-      else await crearProveedor(datos);
-      await cargar();
+      if (editando) await actualizarProveedor(editando, payload);
+      else await crearProveedor(payload);
       setModal(false);
+      setError('');
+      setNotice(editando ? 'Proveedor actualizado correctamente.' : 'Proveedor registrado correctamente.');
+      await cargar();
     } catch (err) {
       setError(err.message);
     } finally {
-      setGuardando(false);
+      setBusy(false);
     }
   }
+
   async function cambiarEstado(p) {
-    if (!puedeCambiarEstado || p.estado !== 'Activo') return;
-    if (!window.confirm(`¿Desactivar a ${p.nombre}?`)) return;
+    if (!puedeCambiarEstado || busy) return;
+    const activo = p.estado === 'Activo';
+    const accion = activo ? 'desactivar' : 'activar';
+    if (!window.confirm(`¿${activo ? 'Desactivar' : 'Activar'} a ${p.nombre}?`)) return;
+    setBusy(true);
+    setPageError('');
+    setNotice('');
     try {
-      await desactivarProveedor(p.id);
+      if (activo) await desactivarProveedor(p.id);
+      else await activarProveedor(p.id);
       await cargar();
+      setNotice(`Proveedor ${activo ? 'desactivado' : 'activado'} correctamente.`);
     } catch (err) {
-      setError(err.message);
+      setPageError(`No se pudo ${accion} el proveedor: ${err.message}`);
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -130,10 +144,14 @@ export default function ProveedoresPage() {
         <div><h1>Proveedores</h1></div>
         {puedeCrear && <button className="prv-primary" type="button" onClick={() => abrir()}>+ Nuevo proveedor</button>}
       </header>
+      {pageError && <p className="prv-error" role="alert">{pageError}</p>}
+      {notice && <p className="frontb-section-note" role="status">{notice}</p>}
+      {loading && <p role="status">Cargando proveedores...</p>}
       <div className="prv-stats">
         <article><span>Registrados</span><strong>{proveedores.length}</strong></article>
         <article><span>Activos</span><strong>{activos}</strong></article>
         <article><span>Inactivos</span><strong>{inactivos}</strong></article>
+        <article><span>Con correo</span><strong>{conCorreo}</strong></article>
       </div>
       <div className="frontb-split frontb-split--providers">
       <div className="prv-panel">
@@ -142,9 +160,9 @@ export default function ProveedoresPage() {
           <input type="search" aria-label="Buscar proveedores" placeholder="Buscar nombre, contacto, NIT o teléfono..." value={buscar} onChange={e => setBuscar(e.target.value)} />
           <select value={filtro} onChange={e => setFiltro(e.target.value)} aria-label="Filtrar por estado"><option>Todos</option><option>Activo</option><option>Inactivo</option></select>
         </div>
-        <div className="prv-table-wrap"><table><thead><tr><th>PROVEEDOR</th><th>CONTACTO</th><th>TELÉFONO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
-          <tbody>{lista.length === 0 ? <tr><td className="prv-empty" colSpan={5}>{cargando ? 'Cargando proveedores...' : proveedores.length ? 'No se encontraron proveedores con esos filtros.' : 'Todavía no hay proveedores registrados.'}</td></tr> : lista.map(p => (
-            <tr key={p.id} className={proveedorEnfocado?.id === p.id ? 'frontb-row-selected' : ''}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" className="frontb-row-view" aria-label={`Ver ficha de ${p.nombre}`} aria-pressed={proveedorEnfocado?.id === p.id} onClick={() => setEnfocadoId(p.id)}>Ver</button>{puedeEditar && <button type="button" onClick={() => abrir(p)}>Editar</button>}{puedeCambiarEstado && p.estado === 'Activo' && <button type="button" onClick={() => cambiarEstado(p)}>Desactivar</button>}</div></td></tr>
+        <div className="prv-table-wrap"><table><thead><tr><th>PROVEEDOR</th><th>CONTACTO</th><th>TELÉFONO</th><th>DIRECCIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead>
+          <tbody>{lista.length === 0 ? <tr><td className="prv-empty" colSpan={6}>{loading ? 'Cargando proveedores...' : proveedores.length ? 'No se encontraron proveedores con esos filtros.' : 'Todavía no hay proveedores registrados.'}</td></tr> : lista.map(p => (
+            <tr key={p.id} className={proveedorEnfocado?.id === p.id ? 'frontb-row-selected' : ''}><td><strong>{p.nombre}</strong>{p.nit && <small>NIT: {p.nit}</small>}</td><td>{p.contacto}{p.correo && <small>{p.correo}</small>}</td><td>{p.telefono}</td><td>{p.direccion || '—'}</td><td><span className={`prv-status ${p.estado === 'Activo' ? 'ok' : 'off'}`}>{p.estado}</span></td><td><div className="prv-actions"><button type="button" className="frontb-row-view" disabled={busy} aria-label={`Ver ficha de ${p.nombre}`} aria-pressed={proveedorEnfocado?.id === p.id} onClick={() => setEnfocadoId(p.id)}>Ver</button>{puedeEditar && <button type="button" disabled={busy || loading} onClick={() => abrir(p)}>Editar</button>}{puedeCambiarEstado && <button type="button" disabled={busy || loading} onClick={() => cambiarEstado(p)}>{p.estado === 'Activo' ? 'Desactivar' : 'Activar'}</button>}</div></td></tr>
           ))}</tbody></table></div>
       </div>
       <aside className="prv-panel frontb-detail-panel">
@@ -164,18 +182,18 @@ export default function ProveedoresPage() {
       </div>
       {modal && <div className="prv-overlay" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
         <div className="prv-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="prv-dialog-title">
-          <div className="prv-dialog-head"><h2 id="prv-dialog-title">{editando ? 'Editar proveedor' : 'Nuevo proveedor'}</h2><button className="prv-close" aria-label="Cerrar" type="button" onClick={close}>×</button></div>
+          <div className="prv-dialog-head"><h2 id="prv-dialog-title">{editando ? 'Editar proveedor' : 'Nuevo proveedor'}</h2><button className="prv-close" aria-label="Cerrar" type="button" disabled={busy} onClick={close}>×</button></div>
           <form onSubmit={guardar} className="prv-form">
             <div className="prv-grid">
               <label>Nombre del proveedor *<input required autoFocus maxLength={120} value={form.nombre} onChange={e => setForm(v => ({ ...v, nombre: e.target.value }))} /></label>
-              <label>NIT<input maxLength={35} value={form.nit} onChange={e => setForm(v => ({ ...v, nit: e.target.value }))} /></label>
+              <label>NIT<input maxLength={20} value={form.nit} onChange={e => setForm(v => ({ ...v, nit: e.target.value }))} /></label>
               <label>Persona de contacto *<input required maxLength={100} value={form.contacto} onChange={e => setForm(v => ({ ...v, contacto: e.target.value }))} /></label>
               <label>Teléfono *<input required type="tel" maxLength={9} pattern="[0-9]{4}-?[0-9]{4}" title="Ingresá 8 dígitos, por ejemplo 7123-4567" placeholder="7123-4567" value={form.telefono} onChange={e => setForm(v => ({ ...v, telefono: e.target.value }))} /></label>
               <label>Correo electrónico<input type="email" maxLength={120} value={form.correo} onChange={e => setForm(v => ({ ...v, correo: e.target.value }))} /></label>
               <label className="prv-wide">Dirección<input maxLength={250} value={form.direccion} onChange={e => setForm(v => ({ ...v, direccion: e.target.value }))} /></label>
             </div>
             {error && <p className="prv-error" role="alert">{error}</p>}
-            <div className="prv-form-actions"><button type="button" className="prv-secondary" onClick={close}>Cancelar</button><button type="submit" className="prv-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar proveedor'}</button></div>
+            <div className="prv-form-actions"><button type="button" className="prv-secondary" disabled={busy} onClick={close}>Cancelar</button><button type="submit" className="prv-primary" disabled={busy}>{busy ? 'Guardando...' : 'Guardar proveedor'}</button></div>
           </form>
         </div>
       </div>}

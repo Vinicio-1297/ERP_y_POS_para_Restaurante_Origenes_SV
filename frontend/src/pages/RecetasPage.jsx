@@ -44,15 +44,20 @@ export default function RecetasPage() {
   const [insumoId, setInsumoId] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  // consultar las recetas desde el backend
+  function validRecipeQuantity(value, unit) {
+    const n = Number(value);
+    return validQuantity(value, unit) && n <= 999999999 &&
+      Math.abs(n * 1000 - Math.round(n * 1000)) < 0.000001;
+  }
+
   async function cargarRecetas(signal) {
     setCargando(true);
 
     try {
       const datos = await listarRecetas(signal);
-      setRecetas(datos);
-      setRecetasError('');
+      if (!signal?.aborted) { setRecetas(datos); setRecetasError(''); }
     } catch (err) {
       if (err.name !== 'AbortError') {
         setRecetasError(err.message);
@@ -135,6 +140,7 @@ export default function RecetasPage() {
     setInsumoId('');
     setCantidad('');
     setError('');
+    setNotice('');
     setVisible(true);
   }
 
@@ -145,8 +151,8 @@ export default function RecetasPage() {
     const item = insumosPorId.get(insumoId);
     const qty = Number(cantidad);
 
-    if (!item || !validQuantity(cantidad, item?.unidad)) {
-      setError('Selecciona un insumo y una cantidad valida.');
+    if (!item || !validRecipeQuantity(cantidad, item?.unidad)) {
+      setError('Seleccioná un insumo y una cantidad positiva de máximo tres decimales.');
       return;
     }
 
@@ -185,11 +191,11 @@ export default function RecetasPage() {
     const rendimiento = Number(form.rendimiento);
 
     if (!porId.has(id)) {
-      setError('Selecciona un producto del POS.');
+      setError('Seleccioná un producto elaborado del POS.');
       return;
     }
 
-    if (!Number.isInteger(rendimiento) || rendimiento <= 0) {
+    if (!Number.isInteger(rendimiento) || rendimiento <= 0 || rendimiento > 999999999) {
       setError('El rendimiento debe ser un entero positivo.');
       return;
     }
@@ -208,7 +214,7 @@ export default function RecetasPage() {
 
     if (form.ingredientes.some(i =>
       !insumosPorId.has(String(i.insumoId)) ||
-      !validQuantity(
+      !validRecipeQuantity(
         i.cantidad,
         insumosPorId.get(String(i.insumoId))?.unidad
       ) ||
@@ -241,6 +247,7 @@ export default function RecetasPage() {
       }
 
       setVisible(false);
+      setNotice(editingId ? 'Receta actualizada correctamente.' : 'Receta creada correctamente.');
       await cargarRecetas();
     } catch (err) {
       setError(err.message);
@@ -256,7 +263,7 @@ export default function RecetasPage() {
     const nombre =
       porId.get(String(receta.productoId))?.name || 'este producto';
 
-    if (!window.confirm(`¿Eliminar la receta de ${nombre}?`)) {
+    if (!window.confirm(`¿Eliminar la receta de ${nombre} del catálogo activo? Se desactivará conservando su historial.`)) {
       return;
     }
 
@@ -270,6 +277,7 @@ export default function RecetasPage() {
       }
 
       await cargarRecetas();
+      setNotice('Receta desactivada correctamente.');
     } catch (err) {
       setRecetasError(err.message);
     } finally {
@@ -282,6 +290,9 @@ export default function RecetasPage() {
       String(r.productoId) === String(p.id)
     )
   );
+  const productosFormulario = editingId
+    ? posProducts.filter(p => String(p.id) === String(form.productoId) || sinReceta.some(a => String(a.id) === String(p.id)))
+    : sinReceta;
 
   const completas = recetas.filter(
     r => r.ingredientes.length > 0
@@ -305,7 +316,7 @@ export default function RecetasPage() {
             <button
               type="button"
               className="rec-primary"
-              disabled={!posProducts.length || !!insumosError || !!recetasError || cargando || guardando}
+              disabled={!sinReceta.length || !disponibles.length || !!insumosError || !!catalogError || !!recetasError || cargando || guardando}
               onClick={() => abrir()}
             >
               + Nueva receta
@@ -340,6 +351,8 @@ export default function RecetasPage() {
           </p>
         )}
 
+        {notice && <p role="status" className="rec-notice">{notice}</p>}
+
         {recetasError && (
           <p className="rec-error" role="alert">
             Error de recetas: {recetasError}
@@ -353,6 +366,16 @@ export default function RecetasPage() {
         {!cargando && !recetasError && !catalogError && sinReceta.length > 0 && (
           <p className="rec-notice">
             Productos sin receta: {sinReceta.map(p => p.name).join(', ')}.
+          </p>
+        )}
+        {!cargando && !recetasError && !catalogError && posProducts.length > 0 && sinReceta.length === 0 && (
+          <p className="rec-notice" role="status">
+            Todos los productos elaborados activos ya tienen receta. Editá una receta existente o agregá otro producto elaborado en el POS.
+          </p>
+        )}
+        {!cargando && !insumosError && disponibles.length === 0 && (
+          <p className="rec-notice" role="status">
+            No hay insumos activos para agregar. Registrá un insumo en Inventario antes de crear una receta.
           </p>
         )}
 
@@ -547,7 +570,7 @@ export default function RecetasPage() {
                     }))}
                   >
                     <option value="">Selecciona un producto...</option>
-                    {posProducts.map(p => (
+                    {productosFormulario.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
@@ -628,8 +651,8 @@ export default function RecetasPage() {
                       Cantidad
                       <input
                         type="number"
-                        min="0"
-                        step={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : 'any'}
+                        min={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : '0.001'}
+                        step={insumosPorId.get(insumoId)?.unidad === 'unidad' ? '1' : '0.001'}
                         placeholder="Cantidad"
                         value={cantidad}
                         disabled={!disponibles.length || guardando}

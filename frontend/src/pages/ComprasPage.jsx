@@ -1,91 +1,58 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useGestionModal from '../hooks/useGestionModal.js';
-import {
-  listarCompras,
-  crearCompra,
-  recibirCompra,
-  anularCompra,
-  listarProveedores,
-} from '../services/comprasProveedoresApi.js';
-import { listarSucursales, listarInventario } from '../services/gestionApi.js';
-import { listarArticulosParaSeleccion } from '../services/gestionApi.js';
-import { STORE_KEYS, subscribeRows, dollarsToCents, centsFor, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/gestionUtils.js';
+import { listarCompras, obtenerCompra, crearCompra, recibirCompra, anularCompra, listarProveedores } from '../services/comprasProveedoresApi.js';
+import { normalizarCompra, normalizarProveedor } from '../services/frontbAdapters.js';
+import { listarSucursales, listarArticulosParaSeleccion } from '../services/gestionApi.js';
+import { dollarsToCents, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/gestionUtils.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
-import { canCreate, canEdit, canDelete, canManage, MODULES } from '../utils/permissions.js';
+import { canCreate, canDelete, canManage, isManager, MODULES } from '../utils/permissions.js';
 import '../styles/compras-feature.css';
 
 
-function normalizeCompra(c) {
-  const lineas = (c.lineas || []).map(l => ({
-    ...l, costoCents: centsFor(l, 'costoCents', 'costo'),
-  }));
-  return {
-    ...c, proveedorId: c.proveedorId || '', lineas,
-    totalCents: Number.isSafeInteger(c.totalCents) ? c.totalCents
-      : lineas.reduce((sum, l) => sum + Math.round(l.cantidad * l.costoCents), 0),
-  };
-}
 function initialForm() {
-  return { numero: '', proveedorId: '', fecha: localDate(), condicionPago: 'Contado', vencimiento: '', lineas: [] };
+  return { numero: '', proveedorId: '', sucursalId: '', fecha: localDate(), condicionPago: 'Contado', vencimiento: '', lineas: [] };
 }
 
 export default function ComprasPage() {
-  const puedeCrear = canCreate(MODULES.COMPRAS);
-  const puedeEditar = canEdit();
+  const puedeCrear = canCreate(MODULES.COMPRAS) || isManager();
   const puedeEliminar = canDelete();
-  const puedeRecibir = canManage();
+  const puedeRecibir = canManage() || isManager();
   const [searchParams] = useSearchParams();
   const preselectedId = searchParams.get('inventarioId');
-  const [compras, setCompras] = useState([])
+  const [compras, setCompras] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [inventarioError, setInventarioError] = useState('');
   const [proveedores, setProveedores] = useState([]);
   const [sucursales, setSucursales] = useState([]);
-  const [insumos, setInsumos] = useState([]);
   const [buscar, setBuscar] = useState('');
   const [enfocadaId, setEnfocadaId] = useState(null);
   const [estadoFiltro, setEstadoFiltro] = useState('Todos');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(initialForm);
-  const [editingId, setEditingId] = useState(null);
   const [linea, setLinea] = useState({ inventarioId: '', cantidad: '', costo: '' });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [pageError, setPageError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [detalleCargandoId, setDetalleCargandoId] = useState(null);
+  const detalleSolicitud = useRef(0);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const sync = () => {
-      listarProveedores({}, controller.signal)
-        .then((rows) => {
-          if (!controller.signal.aborted) {
-            setProveedores(Array.isArray(rows) ? rows : (rows.proveedores ?? []));
-          }
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') setError(err.message);
-        });
-    };
-    sync();
-    window.addEventListener('focus', sync);
-    return () => {
-      controller.abort();
-      window.removeEventListener('focus', sync);
-    };
-  }, []);
-  useEffect(() => {
     if (!preselectedId || !puedeCrear) return;
+    setForm({ ...initialForm(), sucursalId: String(sucursales[0]?.id || '') });
     setLinea({ inventarioId: preselectedId, cantidad: '', costo: '' });
-    setEditingId(null);
-    setForm(initialForm());
+    setInventarioError('');
+    listarArticulosParaSeleccion().then(rows => setInventario(rows.filter(p => p.tipo === 'insumo')))
+      .catch(err => { setInventario([]); setInventarioError(err.message); });
     setError('');
     setModal(true);
   }, [preselectedId, puedeCrear]);
-  const close = () => { setModal(false); setError(''); };
+  const close = () => { if (busy) return; setModal(false); setError(''); };
   const dialogRef = useGestionModal(modal, close);
   const getProveedor = (c) => proveedores.find(p => String(p.id) === String(c.proveedorId))
-    || proveedores.find(p => p.nombre.trim().toLowerCase() === String(c.proveedor).trim().toLowerCase());
+    || proveedores.find(p => p.nombre.trim().toLowerCase() === String(c.proveedor || '').trim().toLowerCase());
   const displayProveedor = (c) => getProveedor(c)?.nombre || c.proveedor || 'Proveedor no encontrado';
 
   const filtradas = useMemo(() => compras.filter(c =>
@@ -93,26 +60,28 @@ export default function ComprasPage() {
     `${c.numero} ${displayProveedor(c)}`.toLowerCase().includes(buscar.trim().toLowerCase())
   ).sort((a, b) => b.fecha.localeCompare(a.fecha)), [compras, buscar, estadoFiltro, proveedores]);
   const recibidas = compras.filter(c => c.estado === 'Recibida').length;
-  const pendientes = compras.filter(c => c.estado === 'Borrador').length;
-  const totalRegistrado = compras.reduce((s, c) => s + c.totalCents, 0);
+  const pendientes = compras.filter(c => c.estado === 'Pendiente').length;
+  const totalRegistrado = compras.filter(c => c.estado !== 'Anulada').reduce((s, c) => s + c.totalCents, 0);
   const totalForm = form.lineas.reduce((s, l) => s + Math.round(l.cantidad * l.costoCents), 0);
 
   const cargarDatos = useCallback(async (signal) => {
     setLoading(true);
     try {
       const [comprasData, proveedoresData, sucursalesData] = await Promise.all([
-        listarCompras({}, signal),
-        listarProveedores({}, signal),
-        listarSucursales(signal),
+        listarCompras({}, signal), listarProveedores({}, signal), listarSucursales(signal),
       ]);
+      if (!Array.isArray(comprasData) || !Array.isArray(proveedoresData) || !Array.isArray(sucursalesData)) {
+        throw new Error('La API no devolvió las listas esperadas.');
+      }
       if (!signal?.aborted) {
-        setCompras(Array.isArray(comprasData) ? comprasData : (comprasData.compras ?? []));
-        setProveedores(Array.isArray(proveedoresData) ? proveedoresData : (proveedoresData.proveedores ?? []));
-        setSucursales(Array.isArray(sucursalesData) ? sucursalesData : []);
-        setError('');
+        setCompras(comprasData.map(normalizarCompra));
+        setProveedores(proveedoresData.map(normalizarProveedor));
+        setSucursales(sucursalesData);
+        setForm(f => f.sucursalId ? f : { ...f, sucursalId: String(sucursalesData[0]?.id || '') });
+        setPageError('');
       }
     } catch (err) {
-      if (err.name !== 'AbortError') setError(err.message);
+      if (err.name !== 'AbortError' && !signal?.aborted) setPageError(err.message);
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -124,88 +93,83 @@ export default function ComprasPage() {
     return () => controller.abort();
   }, [cargarDatos]);
 
-  // Al crear compra, envía la estructura exacta de crearCompraSchema
-  async function handleCrearCompra(formData) {
-    setBusy(true);
-    setError('');
+  async function seleccionar(compra) {
+    if (busy) return;
+    const solicitud = ++detalleSolicitud.current;
+    setEnfocadaId(compra.id);
+    setDetalleCargandoId(compra.id);
     try {
-      await crearCompra({
-        proveedorId: Number(formData.proveedorId),
-        sucursalId: Number(formData.sucursalId),
-        observaciones: formData.observaciones?.trim() || null,
-        detalles: formData.detalles.map((d) => ({
-          insumoId: Number(d.insumoId),
-          cantidad: Number(d.cantidad),
-          costoUnitarioCents: Number(d.costoUnitarioCents),
-        })),
-      });
-      await cargarDatos();
+      const detalle = normalizarCompra(await obtenerCompra(compra.id));
+      setCompras(prev => prev.map(c => String(c.id) === String(compra.id) ? detalle : c));
+      if (solicitud === detalleSolicitud.current) setPageError('');
     } catch (err) {
-      setError(err.message);
+      if (solicitud === detalleSolicitud.current) setPageError(`No se pudo consultar el detalle: ${err.message}`);
     } finally {
-      setBusy(false);
+      if (solicitud === detalleSolicitud.current) setDetalleCargandoId(null);
     }
   }
 
-  async function handleRecibir(compraId) {
-    setBusy(true);
-    setError('');
-    try {
-      await recibirCompra(compraId);
-      await cargarDatos();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAnular(compraId) {
-    setBusy(true);
-    setError('');
-    try {
-      await anularCompra(compraId);
-      await cargarDatos();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function abrir(compra = null) {
-    if (compra ? !puedeEditar : !puedeCrear) return;
-    setEditingId(compra?.id ?? null);
-    setForm(compra ? {
-      numero: compra.numero, proveedorId: String(getProveedor(compra)?.id || ''), fecha: compra.fecha,
-      condicionPago: compra.condicionPago, vencimiento: compra.vencimiento || '',
-      lineas: compra.lineas.map(l => ({ ...l }))
-    } : initialForm());
+  function abrir() {
+    if (!puedeCrear || busy) return;
+    setNotice('');
+    setInventarioError('');
+    setInventario([]);
+    const formNuevo = initialForm();
+    formNuevo.sucursalId = String(sucursales[0]?.id || '');
+    setForm(formNuevo);
     setLinea({ inventarioId: '', cantidad: '', costo: '' });
-    listarArticulosParaSeleccion().then(setInventario).then(() => setInventarioError(''))
+    listarArticulosParaSeleccion().then(rows => setInventario(rows.filter(p => p.tipo === 'insumo'))).then(() => setInventarioError(''))
       .catch(err => { setInventario([]); setInventarioError(err.message); });
-    listarProveedores()
-  .then(data => {
-    const rows = Array.isArray(data) ? data : (data?.proveedores ?? []);
-    const normalizados = rows.map(p => ({
-      ...p,
-      id: p.id,
-      nombre: p.nombre || p.razon_social || p.nombre_comercial || '',
-      estado: p.estado || (p.activo === false ? 'Inactivo' : 'Activo'),
-    }));
-    setProveedores(normalizados);
-  })
-  .catch(() => setProveedores([]));
-    setError(''); setModal(true);
+    setError('');
+    setModal(true);
   }
+
+  async function recibir(compra) {
+    if (!puedeRecibir || busy || compra.estado !== 'Pendiente') return;
+    if (!window.confirm(`¿Recibir la compra ${compra.numero}? Esto aumentará las existencias.`)) return;
+    setBusy(true);
+    try {
+      await recibirCompra(compra.id);
+      setNotice('Compra recibida: el backend registró la entrada de inventario.');
+      await cargarDatos();
+    } catch (err) {
+      setPageError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function anular(compra) {
+    if (!puedeEliminar || busy || compra.estado !== 'Pendiente') return;
+    if (!window.confirm(`¿Anular la compra ${compra.numero}?`)) return;
+    setBusy(true);
+    try {
+      await anularCompra(compra.id);
+      setNotice('Compra anulada correctamente.');
+      await cargarDatos();
+    } catch (err) {
+      setPageError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function validPurchaseQuantity(value, unit) {
+    const n = Number(value);
+    return validQuantity(value, unit) && n <= 999999999 &&
+      Math.abs(n * 1000 - Math.round(n * 1000)) < 0.000001;
+  }
+
   function agregarLinea() {
-    if (!(editingId ? puedeEditar : puedeCrear)) return;
+    if (!puedeCrear || busy) return;
     const item = inventario.find(p => String(p.id) === String(linea.inventarioId));
     const cantidad = Number(linea.cantidad);
     const costoCents = dollarsToCents(linea.costo);
-    if (!item || !validQuantity(linea.cantidad, item?.unidad) || costoCents === null) {
-      setError('Seleccioná un artículo registrado, una cantidad positiva (entera si es por unidad) y un costo válido con máximo dos decimales.'); return;
+    if (!item || !validPurchaseQuantity(linea.cantidad, item?.unidad) ||
+      costoCents === null || costoCents < 0 || costoCents > 2147483647) {
+      setError('Seleccioná un artículo registrado, una cantidad válida y un costo entre $0.00 y $21,474,836.47 con máximo dos decimales.'); return;
     }
+    if (form.lineas.some(l => String(l.inventarioId) === String(item.id))) { setError('Este insumo ya se agregó a la compra.'); return; }
     setForm(f => ({
       ...f, lineas: [...f.lineas, {
         id: newFrontBId('linea'), inventarioId: String(item.id),
@@ -215,63 +179,78 @@ export default function ComprasPage() {
     setLinea({ inventarioId: '', cantidad: '', costo: '' });
     setError('');
   }
-  function guardar(e) {
+  async function guardar(e) {
     e.preventDefault();
-    if (!(editingId ? puedeEditar : puedeCrear)) return;
+    if (!puedeCrear || busy) return;
     const numero = form.numero.trim();
     const proveedorData = proveedores.find(p => String(p.id) === String(form.proveedorId));
-    if (!numero || !proveedorData || !form.fecha || form.lineas.length === 0) {
+    if (!numero || !proveedorData || !form.fecha || !form.sucursalId || form.lineas.length === 0) {
       setError('Completá factura, proveedor, fecha y al menos un artículo.'); return;
     }
-    if (proveedorData.estado !== 'Activo' && !editingId) {
+    if (proveedorData.estado !== 'Activo') {
       setError('Seleccioná un proveedor activo del directorio.'); return;
     }
     if (form.lineas.some(l => !inventario.some(item => String(item.id) === String(l.inventarioId)) ||
-      !validQuantity(l.cantidad, l.unidad) || !Number.isSafeInteger(l.costoCents) || l.costoCents < 0)) {
+      !validPurchaseQuantity(l.cantidad, l.unidad) || !Number.isSafeInteger(l.costoCents) ||
+      l.costoCents < 0 || l.costoCents > 2147483647)) {
       setError('Revisá los artículos, unidades, cantidades y costos de la compra.'); return;
     }
-    if (!Number.isSafeInteger(totalForm) || totalForm < 0) { setError('El total no es válido.'); return; }
+    if (!Number.isSafeInteger(totalForm) || totalForm < 0 || totalForm > 2147483647) {
+      setError('El total de la compra excede el máximo permitido.');
+      return;
+    }
     if (form.condicionPago === 'Crédito' && (!form.vencimiento || form.vencimiento < form.fecha)) {
       setError('La fecha de vencimiento debe ser igual o posterior a la compra.'); return;
     }
-    if (compras.some(c => c.id !== editingId && c.numero.toLowerCase() === numero.toLowerCase() &&
+    if (compras.some(c => c.numero.toLowerCase() === numero.toLowerCase() &&
       String(getProveedor(c)?.id || c.proveedorId || '') === String(proveedorData.id))) {
       setError('Ya existe esta factura para el mismo proveedor.'); return;
     }
-    const compra = {
-      id: editingId || newFrontBId('cmp'), numero,
-      proveedorId: String(proveedorData.id), proveedor: proveedorData.nombre, fecha: form.fecha,
-      condicionPago: form.condicionPago, vencimiento: form.condicionPago === 'Crédito' ? form.vencimiento : '',
-      lineas: form.lineas, totalCents: totalForm, estado: 'Borrador'
-    };
-    setCompras(old => editingId ? old.map(c => c.id === editingId ? compra : c) : [...old, compra]);
-    setModal(false); setError('');
+    if (form.fecha > localDate()) { setError('La fecha de la factura no puede ser futura.'); return; }
+    if (form.lineas.some((l, i) => form.lineas.findIndex(x => String(x.inventarioId) === String(l.inventarioId)) !== i)) {
+      setError('No podés repetir un artículo en la misma compra.'); return;
+    }
+    setBusy(true);
+    try {
+      await crearCompra({
+        proveedorId: Number(form.proveedorId),
+        sucursalId: Number(form.sucursalId),
+        condicionPago: form.condicionPago === 'Crédito' ? 'credito' : 'contado',
+        factura: numero, fechaFactura: form.fecha,
+        vencimiento: form.condicionPago === 'Crédito' ? form.vencimiento : null,
+        detalles: form.lineas.map(l => ({
+          insumoId: Number(l.inventarioId),
+          cantidad: Number(l.cantidad),
+          costoUnitarioCents: Number(l.costoCents),
+        })),
+      });
+      setModal(false);
+      setError('');
+      setNotice('Compra registrada correctamente.');
+      await cargarDatos();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   }
-  function marcarRecibida(compra) {
-    if (!puedeRecibir) return;
-    if (!window.confirm(`¿Marcar como recibida la factura ${compra.numero}?`)) return;
-    setCompras(old => old.map(c => c.id === compra.id && c.estado === 'Borrador'
-      ? { ...c, estado: 'Recibida' } : c));
-  }
-  function eliminar(compra) {
-    if (!puedeEliminar) return;
-    if (compra.estado !== 'Borrador') return;
-    if (window.confirm(`¿Eliminar el borrador ${compra.numero}?`)) setCompras(old => old.filter(c => c.id !== compra.id));
-  }
-  const compraEnfocada = filtradas.find(c => String(c.id) === String(enfocadaId)) || filtradas[0] || null;
+  const compraEnfocada = filtradas.find(c => String(c.id) === String(enfocadaId)) || null;
   return (
     <div className="frontb-workspace">
       <GestionNav />
       <section className="cmp-page">
         <header className="cmp-header">
           <div><h1>Compras</h1></div>
-          {puedeCrear && <button className="cmp-primary" type="button" onClick={() => abrir()}>+ Registrar compra</button>}
+          {puedeCrear && <button className="cmp-primary" type="button" disabled={loading || busy} onClick={() => abrir()}>+ Registrar compra</button>}
         </header>
+        {pageError && <p role="alert" className="cmp-error">{pageError}</p>}
+        {notice && <p role="status" className="cmp-helper">{notice}</p>}
+        {loading && <p role="status">Cargando compras...</p>}
         {inventarioError && <p role="alert" className="cmp-error">No se pudo consultar Inventario: {inventarioError}</p>}
         <div className="cmp-stats">
           <article><span>Compras registradas</span><strong>{compras.length}</strong></article>
           <article><span>Recibidas</span><strong>{recibidas}</strong></article>
-          <article><span>Borradores</span><strong>{pendientes}</strong></article>
+          <article><span>Pendientes</span><strong>{pendientes}</strong></article>
           <article><span>Total registrado</span><strong>{formatMoney(totalRegistrado)}</strong></article>
         </div>
         <div className="frontb-split frontb-split--purchases">
@@ -280,7 +259,7 @@ export default function ComprasPage() {
               <div className="cmp-filters">
                 <input aria-label="Buscar compras" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar factura o proveedor..." />
                 <select aria-label="Filtrar por estado" value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
-                  <option>Todos</option><option>Borrador</option><option>Recibida</option>
+                  <option>Todos</option><option>Pendiente</option><option>Recibida</option><option>Anulada</option>
                 </select>
               </div>
             </div>
@@ -289,12 +268,11 @@ export default function ComprasPage() {
             </tr></thead><tbody>
                 {filtradas.map(c => <tr key={c.id} className={compraEnfocada?.id === c.id ? 'frontb-row-selected' : ''}>
                   <td><strong>{c.numero}</strong></td><td>{displayProveedor(c)}</td><td>{c.fecha}</td><td>{formatMoney(c.totalCents)}</td><td>{c.condicionPago}</td>
-                  <td><span className={`cmp-status ${c.estado === 'Recibida' ? 'ok' : 'draft'}`}>{c.estado}</span></td>
-                  <td><div className="cmp-actions"><button type="button" className="frontb-row-view" aria-label={`Ver detalle de compra ${c.numero}`} aria-pressed={compraEnfocada?.id === c.id} onClick={() => setEnfocadaId(c.id)}>Ver</button>{c.estado === 'Borrador' ? <>
-                    {puedeEditar && <button type="button" onClick={() => abrir(c)}>Editar</button>}
-                    {puedeRecibir && <button type="button" onClick={() => marcarRecibida(c)}>Recibir</button>}
-                    {puedeEliminar && <button type="button" onClick={() => eliminar(c)}>Eliminar</button>}
-                  </> : <span>Registrada</span>}</div></td>
+                  <td><span className={`cmp-status ${c.estado === 'Recibida' ? 'ok' : c.estado === 'Anulada' ? 'cancelled' : 'draft'}`}>{c.estado}</span></td>
+                  <td><div className="cmp-actions"><button type="button" className="frontb-row-view" disabled={busy || String(detalleCargandoId) === String(c.id)} aria-label={`Ver detalle de compra ${c.numero}`} aria-pressed={compraEnfocada?.id === c.id} onClick={() => seleccionar(c)}>{String(detalleCargandoId) === String(c.id) ? 'Cargando...' : 'Ver'}</button>{c.estado === 'Pendiente' ? <>
+                    {puedeRecibir && <button type="button" disabled={busy} onClick={() => recibir(c)}>Recibir</button>}
+                    {puedeEliminar && <button type="button" disabled={busy} onClick={() => anular(c)}>Anular</button>}
+                  </> : <span>{c.estado === 'Anulada' ? 'Anulada' : 'Recibida'}</span>}</div></td>
                 </tr>)}
                 {filtradas.length === 0 && <tr><td colSpan={7} className="cmp-empty">No hay compras registradas con estos filtros.</td></tr>}
               </tbody></table></div>
@@ -304,19 +282,22 @@ export default function ComprasPage() {
             {compraEnfocada ? <>
               <h2>{displayProveedor(compraEnfocada)}</h2>
               <p className="frontb-section-note">Factura {compraEnfocada.numero} · {compraEnfocada.fecha}</p>
-              <span className={`cmp-status ${compraEnfocada.estado === 'Recibida' ? 'ok' : 'draft'}`}>{compraEnfocada.estado}</span>
+              <span className={`cmp-status ${compraEnfocada.estado === 'Recibida' ? 'ok' : compraEnfocada.estado === 'Anulada' ? 'cancelled' : 'draft'}`}>{compraEnfocada.estado}</span>
               <h3>Detalle de artículos</h3>
-              <ul className="frontb-detail-list">{compraEnfocada.lineas.map(l => <li key={l.id}><span>{inventario.find(i => String(i.id) === String(l.inventarioId))?.nombre || 'Artículo del inventario'}<small>{l.cantidad} {l.unidad}</small></span><strong>{formatMoney(l.costoCents * Number(l.cantidad))}</strong></li>)}</ul>
+              {String(detalleCargandoId) === String(compraEnfocada.id) ? <p className="frontb-empty-side">Consultando artículos de la factura...</p> : compraEnfocada.detalleCargado ?
+                <ul className="frontb-detail-list">{compraEnfocada.lineas.map(l => <li key={l.id}><span>{inventario.find(i => String(i.id) === String(l.inventarioId))?.nombre || l.descripcion || 'Artículo del inventario'}<small>{l.cantidad} {l.unidad}</small></span><strong>{formatMoney(l.costoCents * Number(l.cantidad))}</strong></li>)}</ul>
+                : <p className="frontb-empty-side">Presioná Ver en la factura para consultar sus artículos.</p>}
               <div className="frontb-detail-total"><span>Total de la factura</span><strong>{formatMoney(compraEnfocada.totalCents)}</strong></div>
-              {puedeEditar && compraEnfocada.estado === 'Borrador' && <button className="cmp-primary frontb-detail-action" type="button" onClick={() => abrir(compraEnfocada)}>Editar compra</button>}
+              
             </> : <p className="frontb-empty-side">Seleccioná una factura para ver sus artículos.</p>}
           </aside>
         </div>
         {modal && <div className="cmp-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
           <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="cmp-dialog-title" className="cmp-dialog">
-            <div className="cmp-dialog-head"><h2 id="cmp-dialog-title">{editingId ? 'Editar compra' : 'Registrar compra'}</h2><button type="button" aria-label="Cerrar" className="cmp-close" onClick={close}>×</button></div>
+            <div className="cmp-dialog-head"><h2 id="cmp-dialog-title">Registrar compra</h2><button type="button" aria-label="Cerrar" className="cmp-close" disabled={busy} onClick={close}>×</button></div>
             <form onSubmit={guardar} className="cmp-form">
               <div className="cmp-grid">
+                <label>Sucursal<select required value={form.sucursalId} onChange={e => setForm(f => ({ ...f, sucursalId: e.target.value }))}><option value="">Seleccioná una sucursal...</option>{sucursales.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}</select></label>
                 <label>Número de factura<input value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} required /></label>
                 <label>Proveedor
                   <select value={form.proveedorId} onChange={e => setForm(f => ({ ...f, proveedorId: e.target.value }))} required>
@@ -336,9 +317,9 @@ export default function ComprasPage() {
                   {inventario.map(p => <option key={p.id} value={String(p.id)}>{p.nombre} ({p.unidad})</option>)}
                 </select></label>
                 <div className="cmp-add-row">
-                  <label>Cantidad<input type="number" min="0.001" step={inventario.find(p => String(p.id) === String(linea.inventarioId))?.unidad === 'unidad' ? '1' : 'any'} value={linea.cantidad} onChange={e => setLinea(l => ({ ...l, cantidad: e.target.value }))} /></label>
+                  <label>Cantidad<input type="number" min="0.001" step={inventario.find(p => String(p.id) === String(linea.inventarioId))?.unidad === 'unidad' ? '1' : '0.001'} value={linea.cantidad} onChange={e => setLinea(l => ({ ...l, cantidad: e.target.value }))} /></label>
                   <label>Costo unitario ($)<input type="number" min="0" step="0.01" value={linea.costo} onChange={e => setLinea(l => ({ ...l, costo: e.target.value }))} /></label>
-                  <button type="button" className="cmp-secondary" onClick={agregarLinea}>+ Añadir</button>
+                  <button type="button" className="cmp-secondary" disabled={busy || !!inventarioError} onClick={agregarLinea}>+ Añadir</button>
                 </div>
                 {form.lineas.length > 0 && <ul className="cmp-lines">{form.lineas.map(l => <li key={l.id}>
                   <span>{l.descripcion} · {l.cantidad} {l.unidad} × {formatMoney(l.costoCents)} = {formatMoney(Math.round(l.cantidad * l.costoCents))}</span>
@@ -348,7 +329,7 @@ export default function ComprasPage() {
               </fieldset>
               {!proveedores.some(p => p.estado === 'Activo') && <p className="cmp-helper">No hay proveedores activos. <Link to="/proveedores">Registrá uno en Proveedores</Link> y volvé a Compras.</p>}
               {error && <p role="alert" className="cmp-error">{error}</p>}
-              <div className="cmp-form-actions"><button type="button" className="cmp-secondary" onClick={close}>Cancelar</button><button type="submit" className="cmp-primary">Guardar borrador</button></div>
+              <div className="cmp-form-actions"><button type="button" className="cmp-secondary" disabled={busy} onClick={close}>Cancelar</button><button type="submit" className="cmp-primary" disabled={busy || !!inventarioError || !proveedores.some(p => p.estado === 'Activo')}>{busy ? 'Guardando...' : 'Registrar compra'}</button></div>
             </form>
           </div>
         </div>}

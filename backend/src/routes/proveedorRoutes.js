@@ -58,5 +58,13 @@ router.delete(
   proveedorController.desactivar
 );
 
-module.exports = router;
+// Reactivar proveedor
+router.patch(
+  '/proveedores/:id/activar',
+  authenticate,
+  authorize('administrador'),
+  validate(proveedorIdSchema, 'params'),
+  proveedorController.activar
+);
 
+module.exports = router;
