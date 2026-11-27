@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import useGestionModal from '../hooks/useGestionModal.js';
-import { listarProveedores, crearProveedor, actualizarProveedor, desactivarProveedor, activarProveedor } from '../services/comprasProveedoresApi.js';
+import { listarProveedores, crearProveedor, actualizarProveedor, desactivarProveedor, activarProveedor, listarInsumosProveedor, asignarInsumoProveedor, retirarInsumoProveedor } from '../services/comprasProveedoresApi.js';
+import { listarArticulosParaSeleccion } from '../services/gestionApi.js';
 import { normalizarProveedor } from '../services/frontbAdapters.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
 import { canCreate, canEdit, canManage, isManager, MODULES } from '../utils/permissions.js';
@@ -25,6 +26,133 @@ function validar(form, proveedores, editando) {
   if (proveedores.some(p => p.id !== editando && p.nombre.trim().toLowerCase() === form.nombre.trim().toLowerCase())) return 'Ya existe un proveedor con ese nombre.';
   if (form.nit.trim() && proveedores.some(p => p.id !== editando && p.nit && p.nit.trim().toLowerCase() === form.nit.trim().toLowerCase())) return 'Ya existe un proveedor con ese NIT.';
   return '';
+}
+
+function CatalogoProveedor({ proveedor, puedeAdministrar }) {
+  const [catalogo, setCatalogo] = useState([]);
+  const [inventario, setInventario] = useState([]);
+  const [seleccion, setSeleccion] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function cargar() {
+      try {
+        const [asignados, articulos] = await Promise.all([
+          listarInsumosProveedor(proveedor.id, controller.signal),
+          puedeAdministrar
+            ? listarArticulosParaSeleccion()
+            : Promise.resolve([])
+        ]);
+
+        if (controller.signal.aborted) return;
+
+        if (!Array.isArray(asignados) || !Array.isArray(articulos)) {
+          throw new Error('No se pudo cargar el catálogo.');
+        }
+
+        setCatalogo(asignados);
+        setInventario(articulos.filter(i =>
+          i.tipo === 'insumo' && i.activo !== false
+        ));
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+
+    cargar();
+    return () => controller.abort();
+  }, [proveedor.id, puedeAdministrar]);
+
+  const disponibles = inventario.filter(i =>
+    !catalogo.some(c => String(c.id) === String(i.id))
+  );
+
+  async function modificar(insumoId, retirar = false) {
+    if (busy || !puedeAdministrar || !insumoId) return;
+    if (!retirar && proveedor.estado !== 'Activo') return;
+
+    setBusy(true);
+    setError('');
+
+    try {
+      const datos = retirar
+        ? await retirarInsumoProveedor(proveedor.id, insumoId)
+        : await asignarInsumoProveedor(proveedor.id, insumoId);
+
+      if (!Array.isArray(datos)) {
+        throw new Error('La API devolvió un catálogo inválido.');
+      }
+
+      setCatalogo(datos);
+      setSeleccion('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h3>Catálogo de insumos</h3>
+      <p className="frontb-section-note">
+        Artículos que suministra este proveedor.
+      </p>
+
+      {error && <p className="prv-error" role="alert">{error}</p>}
+
+      {loading ? <p>Cargando catálogo...</p> : <>
+        {catalogo.length === 0 && !error &&
+          <p>No hay insumos asignados.</p>}
+
+        <ul className="frontb-detail-list">
+          {catalogo.map(i => (
+            <li key={i.id}>
+              <span>{i.nombre}<small>{i.unidad}</small></span>
+              {puedeAdministrar && (
+                <button type="button"
+                  className="prv-secondary"
+                  disabled={busy}
+                  onClick={() => modificar(i.id, true)}>
+                  Quitar
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {puedeAdministrar && proveedor.estado === 'Activo' && (
+          <div className="prv-form">
+            <label>Asignar insumo
+              <select value={seleccion}
+                disabled={busy}
+                onChange={e => setSeleccion(e.target.value)}>
+                <option value="">Seleccioná un insumo...</option>
+                {disponibles.map(i => (
+                  <option key={i.id} value={String(i.id)}>
+                    {i.nombre} ({i.unidad})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button type="button"
+              className="prv-primary"
+              disabled={busy || !seleccion}
+              onClick={() => modificar(seleccion)}>
+              + Asignar insumo
+            </button>
+          </div>
+        )}
+      </>}
+    </section>
+  );
 }
 
 export default function ProveedoresPage() {
@@ -176,7 +304,12 @@ export default function ProveedoresPage() {
             <div><dt>NIT</dt><dd>{proveedorEnfocado.nit || 'No registrado'}</dd></div>
             <div><dt>Dirección</dt><dd>{proveedorEnfocado.direccion || 'No registrada'}</dd></div>
           </dl>
-          {puedeEditar && <button type="button" className="prv-primary frontb-detail-action" onClick={() => abrir(proveedorEnfocado)}>Editar proveedor</button>}
+          <CatalogoProveedor
+  key={proveedorEnfocado.id}
+  proveedor={proveedorEnfocado}
+  puedeAdministrar={puedeCambiarEstado}
+/>
+{puedeEditar && <button type="button" className="prv-primary frontb-detail-action" onClick={() => abrir(proveedorEnfocado)}>Editar proveedor</button>}
         </> : <p className="frontb-empty-side">Seleccioná un proveedor para ver su información.</p>}
       </aside>
       </div>
@@ -201,3 +334,4 @@ export default function ProveedoresPage() {
     </div>
   );
 }
+

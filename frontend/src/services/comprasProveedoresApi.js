@@ -1,24 +1,21 @@
-import { request } from './http.js';
+import { request } from './http';
 
-function datos(result) {
-  return result?.datos ?? result;
+function datos(resultado) {
+  return resultado?.datos ?? resultado;
 }
 
-// --- Proveedores ---
-
-// adaptar los datos del proveedor para las pantallas
+// normalizar los datos de proveedores
 export function normalizarProveedor(p) {
   return {
     ...p,
     nombre: p.razon_social || p.nombre_comercial || p.nombre || '',
-    estado: p.activo === false
-      ? 'Inactivo'
-      : p.activo === true
-        ? 'Activo'
-        : p.estado ?? 'Activo',
+    estado: typeof p.activo === 'boolean'
+      ? (p.activo ? 'Activo' : 'Inactivo')
+      : (p.estado || 'Activo'),
   };
 }
 
+// listar proveedores
 export async function listarProveedores(filtros = {}, signal) {
   const params = new URLSearchParams();
 
@@ -26,63 +23,58 @@ export async function listarProveedores(filtros = {}, signal) {
     params.set('busqueda', filtros.busqueda);
   }
 
-  if (typeof filtros.activo === 'boolean') {
+  if (filtros.activo !== undefined && filtros.activo !== null) {
     params.set('activo', String(filtros.activo));
   }
 
   const query = params.toString();
 
-  const filas = datos(
-    await request(
-      `/proveedores${query ? `?${query}` : ''}`,
-      { signal }
-    )
-  );
+  const resultado = datos(await request(
+    `/proveedores${query ? `?${query}` : ''}`,
+    { signal }
+  ));
 
-  const lista = Array.isArray(filas)
-    ? filas
-    : (filas?.proveedores ?? []);
+  const proveedores = Array.isArray(resultado)
+    ? resultado
+    : resultado.proveedores ?? [];
 
-  return lista.map(normalizarProveedor);
+  return proveedores.map(normalizarProveedor);
 }
 
-export async function crearProveedor(payload) {
-  return datos(
-    await request('/proveedores', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  );
+// registrar proveedor
+export async function crearProveedor(proveedor) {
+  return datos(await request('/proveedores', {
+    method: 'POST',
+    body: JSON.stringify(proveedor),
+  }));
 }
 
-export async function actualizarProveedor(id, payload) {
-  return datos(
-    await request(`/proveedores/${encodeURIComponent(id)}`, {
+// actualizar proveedor
+export async function actualizarProveedor(id, proveedor) {
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}`,
+    {
       method: 'PATCH',
-      body: JSON.stringify(payload),
-    })
-  );
+      body: JSON.stringify(proveedor),
+    }
+  ));
 }
 
+// desactivar proveedor
 export async function desactivarProveedor(id) {
-  return datos(
-    await request(`/proveedores/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    })
-  );
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}`,
+    { method: 'DELETE' }
+  ));
 }
 
-// reactivar un proveedor desactivado
+// activar proveedor
 export async function activarProveedor(id) {
-  return datos(
-    await request(
-      `/proveedores/${encodeURIComponent(id)}/activar`,
-      { method: 'PATCH' }
-    )
-  );
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}/activar`,
+    { method: 'PATCH' }
+  ));
 }
-
-// --- Compras ---
 
 const ESTADOS_COMPRA = {
   pendiente: 'Borrador',
@@ -102,8 +94,7 @@ const ESTADOS_API = {
   Anulada: 'anulada',
 };
 
-// convertir fechas al formato YYYY-MM-DD
-export function aFechaISO(valor) {
+function aFechaISO(valor) {
   if (!valor) return '';
 
   if (typeof valor === 'string') {
@@ -117,8 +108,7 @@ export function aFechaISO(valor) {
     : fecha.toISOString().slice(0, 10);
 }
 
-// convertir la fecha de compra a la fecha local
-export function aFechaLocal(valor) {
+function aFechaLocal(valor) {
   if (!valor) return '';
 
   if (
@@ -131,16 +121,18 @@ export function aFechaLocal(valor) {
   const fecha = new Date(valor);
 
   if (Number.isNaN(fecha.getTime())) {
-    return aFechaISO(valor);
+    return '';
   }
 
-  const dos = (n) => String(n).padStart(2, '0');
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
 
-  return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
+  return `${anio}-${mes}-${dia}`;
 }
 
-// adaptar los detalles de una compra
-export function normalizarDetalle(d) {
+// normalizar los detalles de una compra
+function normalizarDetalle(d) {
   const cantidad = Number(d.cantidad ?? 0);
 
   const costoCents = Number(
@@ -150,9 +142,7 @@ export function normalizarDetalle(d) {
   return {
     ...d,
     id: d.id,
-    inventarioId: String(
-      d.insumo_id ?? d.inventarioId ?? ''
-    ),
+    inventarioId: String(d.insumo_id ?? d.inventarioId ?? ''),
     descripcion: d.insumo ?? d.descripcion ?? '',
     unidad: d.unidad ?? '',
     cantidad,
@@ -165,54 +155,44 @@ export function normalizarDetalle(d) {
   };
 }
 
-// adaptar los datos de compras sin perder los campos originales
+// normalizar una compra
 export function normalizarCompra(c) {
-  const detalles = Array.isArray(c.detalles)
-    ? c.detalles
-    : Array.isArray(c.lineas)
-      ? c.lineas
-      : null;
+  const detalles = c.detalles ?? c.lineas ?? [];
 
-  const tieneDetalles =
+  const detallesCargados =
     Array.isArray(c.detalles) ||
     c.detallesCargados === true ||
     (
-      c.detallesCargados !== false &&
-      Array.isArray(c.lineas)
+      Array.isArray(c.lineas) &&
+      c.detallesCargados !== false
     );
-
-  const condicion = c.condicion_pago ?? c.condicionPago;
 
   return {
     ...c,
     id: c.id,
     fecha: aFechaLocal(c.fecha_compra ?? c.fecha),
-    fechaFactura: aFechaISO(
-      c.fecha_factura ?? c.fechaFactura
-    ),
+    fechaFactura: aFechaISO(c.fecha_factura ?? c.fechaFactura),
     vencimiento: aFechaISO(c.vencimiento),
     numero: c.factura ?? c.numero ?? '',
     proveedor: c.proveedor ?? '',
-    proveedorId: c.proveedor_id ?? c.proveedorId ?? '',
-    sucursalId: c.sucursal_id ?? c.sucursalId ?? '',
-    totalCents: Number(
-      c.total_cents ?? c.totalCents ?? 0
-    ),
+    proveedorId: c.proveedor_id ?? c.proveedorId,
+    sucursalId: c.sucursal_id ?? c.sucursalId,
+    totalCents: Number(c.total_cents ?? c.totalCents ?? 0),
     condicionPago:
-      CONDICIONES_PAGO[condicion] ??
-      condicion ??
+      CONDICIONES_PAGO[c.condicion_pago] ??
+      c.condicionPago ??
       'Contado',
-    estadoOriginal: c.estadoOriginal ?? c.estado ?? '',
-    estado: ESTADOS_COMPRA[c.estado] ?? c.estado ?? '',
+    estadoOriginal: c.estadoOriginal ?? c.estado,
+    estado: ESTADOS_COMPRA[c.estado] ?? c.estado,
     observaciones: c.observaciones ?? '',
-    detallesCargados: tieneDetalles,
-    lineas: detalles
+    detallesCargados,
+    lineas: Array.isArray(detalles)
       ? detalles.map(normalizarDetalle)
       : [],
   };
 }
 
-// listar compras con filtros opcionales
+// listar compras
 export async function listarCompras(filtros = {}, signal) {
   const params = new URLSearchParams();
 
@@ -224,70 +204,93 @@ export async function listarCompras(filtros = {}, signal) {
     params.set(
       'estado',
       ESTADOS_API[filtros.estado] ??
-      filtros.estado.toLowerCase()
+      String(filtros.estado).toLowerCase()
     );
   }
 
-  for (const campo of ['proveedorId', 'sucursalId']) {
-    if (filtros[campo] != null && filtros[campo] !== '') {
-      params.set(campo, String(filtros[campo]));
-    }
+  if (filtros.proveedorId) {
+    params.set('proveedorId', filtros.proveedorId);
+  }
+
+  if (filtros.sucursalId) {
+    params.set('sucursalId', filtros.sucursalId);
   }
 
   const query = params.toString();
 
-  const filas = datos(
-    await request(
-      `/compras${query ? `?${query}` : ''}`,
-      { signal }
-    )
-  );
+  const resultado = datos(await request(
+    `/compras${query ? `?${query}` : ''}`,
+    { signal }
+  ));
 
-  const lista = Array.isArray(filas)
-    ? filas
-    : (filas?.compras ?? []);
+  const compras = Array.isArray(resultado)
+    ? resultado
+    : resultado.compras ?? [];
 
-  return lista.map(normalizarCompra);
+  return compras.map(normalizarCompra);
 }
 
-// consultar una compra con sus detalles
+// consultar una compra
 export async function obtenerCompra(id, signal) {
-  const compra = datos(
-    await request(
-      `/compras/${encodeURIComponent(id)}`,
-      { signal }
-    )
-  );
+  const resultado = datos(await request(
+    `/compras/${encodeURIComponent(id)}`,
+    { signal }
+  ));
 
-  return normalizarCompra(compra);
+  return normalizarCompra(resultado);
 }
 
-// registrar una compra
-export async function crearCompra(payload) {
-  return datos(
-    await request('/compras', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  );
+// registrar compra
+export async function crearCompra(compra) {
+  return datos(await request('/compras', {
+    method: 'POST',
+    body: JSON.stringify(compra),
+  }));
 }
 
-// recibir una compra y actualizar el inventario
+// recibir compra
 export async function recibirCompra(id) {
-  return datos(
-    await request(
-      `/compras/${encodeURIComponent(id)}/recibir`,
-      { method: 'PATCH' }
-    )
-  );
+  return datos(await request(
+    `/compras/${encodeURIComponent(id)}/recibir`,
+    { method: 'PATCH' }
+  ));
 }
 
-// anular una compra pendiente
+// anular compra
 export async function anularCompra(id) {
-  return datos(
-    await request(
-      `/compras/${encodeURIComponent(id)}/anular`,
-      { method: 'PATCH' }
-    )
-  );
+  return datos(await request(
+    `/compras/${encodeURIComponent(id)}/anular`,
+    { method: 'PATCH' }
+  ));
+}
+
+// consultar los insumos de un proveedor
+export async function listarInsumosProveedor(id, signal) {
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}/insumos`,
+    { signal }
+  ));
+}
+
+// asignar un insumo al proveedor
+export async function asignarInsumoProveedor(id, insumoId) {
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}/insumos`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        insumoId: Number(insumoId),
+      }),
+    }
+  ));
+}
+
+// retirar un insumo del proveedor
+export async function retirarInsumoProveedor(id, insumoId) {
+  return datos(await request(
+    `/proveedores/${encodeURIComponent(id)}/insumos/${encodeURIComponent(insumoId)}`,
+    {
+      method: 'DELETE',
+    }
+  ));
 }

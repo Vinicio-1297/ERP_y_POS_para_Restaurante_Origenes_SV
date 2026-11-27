@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useGestionModal from '../hooks/useGestionModal.js';
 import {
@@ -8,8 +8,9 @@ import {
   recibirCompra,
   anularCompra,
   listarProveedores,
+  listarInsumosProveedor,
 } from '../services/comprasProveedoresApi.js';
-import { listarSucursales, listarArticulosParaSeleccion } from '../services/gestionApi.js';
+import { listarSucursales } from '../services/gestionApi.js';
 import { dollarsToCents, formatMoney, validQuantity, newFrontBId, localDate } from '../utils/gestionUtils.js';
 import GestionNav from '../components/gestion/GestionNav.jsx';
 import { canCreate, canReceivePurchases, canCancelPurchases, MODULES } from '../utils/permissions.js';
@@ -67,6 +68,8 @@ export default function ComprasPage() {
   const [sucursales, setSucursales] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [inventarioError, setInventarioError] = useState('');
+  const [cargandoCatalogo, setCargandoCatalogo] = useState(false);
+  const [catalogoProveedorId, setCatalogoProveedorId] = useState('');
   const [detalles, setDetalles] = useState({}); // id -> compra con detalles reales
   const [detalleError, setDetalleError] = useState('');
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -178,38 +181,93 @@ export default function ComprasPage() {
     await cargarDatos();
   }
 
-  async function abrir() {
+  function abrir() {
     if (!puedeCrear) return;
+
     const base = initialForm();
-    if (sucursales.length === 1) base.sucursalId = String(sucursales[0].id);
+
+    if (sucursales.length === 1) {
+      base.sucursalId = String(sucursales[0].id);
+    }
+
     setForm(base);
-    setLinea({ ...lineaVacia(), inventarioId: preselectedId || '' });
+    setLinea(lineaVacia());
+    setInventario([]);
+    setCatalogoProveedorId('');
+    setInventarioError('');
     setModalError('');
     setModal(true);
-    try {
-      const articulos = await listarArticulosParaSeleccion();
-
-      if (!Array.isArray(articulos)) {
-        throw new Error('No se pudo obtener el listado de inventario.');
-      }
-
-      setInventario(articulos.filter((p) => p.tipo === 'insumo'));
-      setInventarioError('');
-    } catch (err) {
-      setInventario([]);
-      setInventarioError(err.message);
-    }
   }
 
-  // Si se llega desde Inventario ("Registrar compra"), se abre el formulario con el artículo elegido.
+  function cambiarProveedor(id) {
+    if (busy) return;
+
+    if (form.lineas.length > 0 &&
+        !window.confirm('Cambiar de proveedor eliminará los artículos agregados. ¿Continuar?')) {
+      return;
+    }
+
+    setInventario([]);
+    setCatalogoProveedorId('');
+    setInventarioError('');
+    setForm(f => ({ ...f, proveedorId: id, lineas: [] }));
+    setLinea(lineaVacia());
+    setModalError('');
+  }
+
+  useEffect(() => {
+    if (!modal || !form.proveedorId) {
+      setCargandoCatalogo(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const id = form.proveedorId;
+
+    setCargandoCatalogo(true);
+    setInventarioError('');
+
+    listarInsumosProveedor(id, controller.signal)
+      .then(datos => {
+        if (controller.signal.aborted) return;
+
+        if (!Array.isArray(datos)) {
+          throw new Error('El catálogo recibido no es válido.');
+        }
+
+        setInventario(datos);
+        setCatalogoProveedorId(id);
+
+        if (preselectedId &&
+            datos.some(i => String(i.id) === preselectedId)) {
+          setLinea(l => ({ ...l, inventarioId: preselectedId }));
+        }
+      })
+      .catch(err => {
+        if (!controller.signal.aborted) {
+          setInventario([]);
+          setCatalogoProveedorId('');
+          setInventarioError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setCargandoCatalogo(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [modal, form.proveedorId, preselectedId]);
+
   useEffect(() => {
     if (!preselectedId || !puedeCrear || loading || preseleccionAbierta.current) return;
     preseleccionAbierta.current = true;
     abrir();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedId, puedeCrear, loading]);
 
   function agregarLinea() {
+    if (cargandoCatalogo || inventarioError ||
+        catalogoProveedorId !== form.proveedorId) return;
     if (busy) return;
     const item = inventario.find((p) => String(p.id) === String(linea.inventarioId));
     const cantidad = Number(linea.cantidad);
@@ -236,6 +294,14 @@ export default function ComprasPage() {
   async function guardar(e) {
     e.preventDefault();
     if (busy || !puedeCrear) return;
+    if (cargandoCatalogo || inventarioError ||
+        catalogoProveedorId !== form.proveedorId ||
+        form.lineas.some(l => !inventario.some(i =>
+          String(i.id) === String(l.inventarioId)))) {
+      setModalError('Seleccioná artículos válidos del catálogo del proveedor.');
+      return;
+    }
+
     const factura = form.numero.trim();
     const esCredito = form.condicionPago === 'Crédito';
     const proveedor = proveedores.find((p) => String(p.id) === String(form.proveedorId));
@@ -400,7 +466,7 @@ export default function ComprasPage() {
                 <label>Número de factura{form.condicionPago === 'Crédito' ? '' : ' (opcional)'}
                   <input value={form.numero} maxLength={100} onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))} required={form.condicionPago === 'Crédito'} /></label>
                 <label>Proveedor
-                  <select value={form.proveedorId} onChange={(e) => setForm((f) => ({ ...f, proveedorId: e.target.value }))} required>
+                  <select value={form.proveedorId} disabled={busy} onChange={(e) => cambiarProveedor(e.target.value)} required>
                     <option value="">Seleccioná un proveedor...</option>
                     {proveedores.filter((p) => p.estado === 'Activo')
                       .map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
@@ -422,16 +488,19 @@ export default function ComprasPage() {
               </div>
               <label>Observaciones (opcional)<input maxLength={500} value={form.observaciones} onChange={(e) => setForm((f) => ({ ...f, observaciones: e.target.value }))} /></label>
               <fieldset className="cmp-detail"><legend>Artículos de la compra</legend>
-                <p className="cmp-helper">Seleccioná un artículo registrado en Inventario. Para artículos nuevos, <Link to="/inventario">crealo primero en Inventario</Link>.</p>
+                <p className="cmp-helper">Seleccioná un artículo del catálogo del proveedor. Para artículos nuevos, <Link to="/inventario">crealo primero en Inventario</Link>.</p>
                 {inventarioError && <p role="alert" className="cmp-error">No se pudo consultar Inventario: {inventarioError}</p>}
-                <label>Artículo de inventario<select value={linea.inventarioId} onChange={(e) => setLinea((l) => ({ ...l, inventarioId: e.target.value }))}>
+                {!form.proveedorId && <p className="cmp-helper">Seleccioná primero un proveedor.</p>}
+{cargandoCatalogo && <p>Cargando catálogo...</p>}
+{form.proveedorId && !cargandoCatalogo && !inventarioError && inventario.length === 0 && <p className="cmp-helper">Este proveedor no tiene insumos asignados. Administrá su catálogo en Proveedores.</p>}
+<label>Artículo de inventario<select disabled={busy || cargandoCatalogo || !form.proveedorId || !!inventarioError} value={linea.inventarioId} onChange={(e) => setLinea((l) => ({ ...l, inventarioId: e.target.value }))}>
                   <option value="">Seleccioná un artículo...</option>
                   {inventario.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre} ({p.unidad})</option>)}
                 </select></label>
                 <div className="cmp-add-row">
                   <label>Cantidad<input type="number" min="0.001" step={itemSeleccionado?.unidad === 'unidad' ? '1' : 'any'} value={linea.cantidad} onChange={(e) => setLinea((l) => ({ ...l, cantidad: e.target.value }))} /></label>
                   <label>Costo unitario ($)<input type="number" min="0" step="0.01" value={linea.costo} onChange={(e) => setLinea((l) => ({ ...l, costo: e.target.value }))} /></label>
-                  <button type="button" className="cmp-secondary" onClick={agregarLinea}>+ Añadir</button>
+                  <button type="button" className="cmp-secondary" disabled={busy || cargandoCatalogo || !form.proveedorId || !!inventarioError} onClick={agregarLinea}>+ Añadir</button>
                 </div>
                 {form.lineas.length > 0 && <ul className="cmp-lines">{form.lineas.map((l) => <li key={l.id}>
                   <span>{l.descripcion} · {l.cantidad} {l.unidad} × {formatMoney(l.costoCents)} = {formatMoney(Math.round(l.cantidad * l.costoCents))}</span>
@@ -449,3 +518,4 @@ export default function ComprasPage() {
     </div>
   );
 }
+
